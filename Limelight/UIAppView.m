@@ -13,6 +13,7 @@ static const float REFRESH_CYCLE = 1.0f;
 
 @implementation UIAppView {
     TemporaryApp* _app;
+    UIVisualEffectView* _cardBackground;
     UILabel* _appLabel;
     UIImageView* _appOverlay;
     UIImageView* _appImage;
@@ -41,6 +42,16 @@ static UIImage* noImage;
 #endif
     
     [self setAlpha:app.hidden ? 0.4 : 1.0];
+
+#if TARGET_OS_TV
+    _cardBackground = [[UIVisualEffectView alloc] initWithEffect:[UIBlurEffect effectWithStyle:UIBlurEffectStyleDark]];
+    _cardBackground.frame = self.bounds;
+    _cardBackground.userInteractionEnabled = NO;
+    _cardBackground.alpha = 0.55;
+    _cardBackground.clipsToBounds = YES;
+    _cardBackground.layer.cornerRadius = 24.0;
+    [self addSubview:_cardBackground];
+#endif
     
     _appImage = [[UIImageView alloc] initWithFrame:self.frame];
     [_appImage setImage:noImage];
@@ -67,6 +78,14 @@ static UIImage* noImage;
     
 #if TARGET_OS_TV
     _appImage.adjustsImageWhenAncestorFocused = YES;
+    _appImage.layer.cornerRadius = 24.0;
+    _appImage.clipsToBounds = YES;
+    
+    self.layer.shadowColor = [[UIColor blackColor] CGColor];
+    self.layer.shadowOffset = CGSizeMake(0, 18);
+    self.layer.shadowOpacity = 0.25;
+    self.layer.shadowRadius = 24.0;
+    self.clipsToBounds = NO;
 #else
     // Rasterizing the cell layer increases rendering performance by quite a bit
     // but we want it unrasterized for tvOS where it must be scaled.
@@ -83,6 +102,28 @@ static UIImage* noImage;
     
     return self;
 }
+
+#if TARGET_OS_TV
+- (void)didUpdateFocusInContext:(UIFocusUpdateContext *)context withAnimationCoordinator:(UIFocusAnimationCoordinator *)coordinator {
+    [super didUpdateFocusInContext:context withAnimationCoordinator:coordinator];
+    
+    BOOL nextIsSelf = (context.nextFocusedView == self);
+    BOOL prevIsSelf = (context.previouslyFocusedView == self);
+    if (!nextIsSelf && !prevIsSelf) {
+        return;
+    }
+    
+    CGFloat targetScale = nextIsSelf ? 1.08 : 1.0;
+    CGFloat targetShadowOpacity = nextIsSelf ? 0.6 : 0.25;
+    CGFloat targetMaterialAlpha = nextIsSelf ? 0.75 : 0.55;
+    
+    [coordinator addCoordinatedAnimations:^{
+        self.transform = CGAffineTransformMakeScale(targetScale, targetScale);
+        self.layer.shadowOpacity = targetShadowOpacity;
+        self->_cardBackground.alpha = targetMaterialAlpha;
+    } completion:nil];
+}
+#endif
 
 - (void)didMoveToSuperview {
     // Start our update loop when we are added to our cell

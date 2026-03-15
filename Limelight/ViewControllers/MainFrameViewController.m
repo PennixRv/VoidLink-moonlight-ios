@@ -6,6 +6,7 @@
 //
 
 @import ImageIO;
+@import QuartzCore;
 
 #import "MainFrameViewController.h"
 #import "CryptoManager.h"
@@ -37,6 +38,13 @@
 
 #include <Limelight.h>
 
+#if TARGET_OS_TV
+@interface MainFrameViewController ()
+- (void)tvosInstallBackgroundIfNeeded;
+- (void)tvosUpdateBackgroundGradientColorsIfNeeded;
+@end
+#endif
+
 @implementation MainFrameViewController {
     NSOperationQueue* _opQueue;
     TemporaryHost* _selectedHost;
@@ -55,6 +63,8 @@
     bool _background;
 #if TARGET_OS_TV
     UITapGestureRecognizer* _menuRecognizer;
+    UIView* _tvosBackgroundView;
+    CAGradientLayer* _tvosBackgroundGradientLayer;
 #endif
 }
 static NSMutableSet* hostList;
@@ -975,6 +985,8 @@ static NSMutableSet* hostList;
     navBar.barTintColor = backgroundColor;
     navBar.tintColor = foregroundColor;
     navBar.titleTextAttributes = @{ NSForegroundColorAttributeName: foregroundColor };
+
+    [self tvosInstallBackgroundIfNeeded];
 #endif
     
     _loadingFrame = [self.storyboard instantiateViewControllerWithIdentifier:@"loadingFrame"];
@@ -1044,6 +1056,74 @@ static NSMutableSet* hostList;
 - (void)openTvSettings:(id)sender
 {
     [[UIApplication sharedApplication] openURL:[NSURL URLWithString:UIApplicationOpenSettingsURLString] options:@{} completionHandler:nil];
+}
+
+- (void)viewDidLayoutSubviews
+{
+    [super viewDidLayoutSubviews];
+    
+    if (_tvosBackgroundGradientLayer != nil) {
+        _tvosBackgroundGradientLayer.frame = _tvosBackgroundView.bounds;
+    }
+}
+
+- (void)traitCollectionDidChange:(UITraitCollection *)previousTraitCollection
+{
+    [super traitCollectionDidChange:previousTraitCollection];
+    [self tvosUpdateBackgroundGradientColorsIfNeeded];
+}
+
+- (void)tvosInstallBackgroundIfNeeded
+{
+    if (_tvosBackgroundView != nil) {
+        return;
+    }
+    
+    _tvosBackgroundView = [[UIView alloc] initWithFrame:self.collectionView.bounds];
+    _tvosBackgroundView.userInteractionEnabled = NO;
+    _tvosBackgroundView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+    
+    _tvosBackgroundGradientLayer = [CAGradientLayer layer];
+    _tvosBackgroundGradientLayer.startPoint = CGPointMake(0.0, 0.0);
+    _tvosBackgroundGradientLayer.endPoint = CGPointMake(1.0, 1.0);
+    _tvosBackgroundGradientLayer.frame = _tvosBackgroundView.bounds;
+    [_tvosBackgroundView.layer addSublayer:_tvosBackgroundGradientLayer];
+    
+    [self tvosUpdateBackgroundGradientColorsIfNeeded];
+    
+    self.collectionView.backgroundView = _tvosBackgroundView;
+    self.collectionView.backgroundColor = [UIColor clearColor];
+}
+
+- (void)tvosUpdateBackgroundGradientColorsIfNeeded
+{
+    if (_tvosBackgroundGradientLayer == nil) {
+        return;
+    }
+    
+    UIColor* startColor = nil;
+    UIColor* endColor = nil;
+    
+    // Keep this subtle to avoid distracting from content and to keep contrast high.
+    if (@available(tvOS 13.0, *)) {
+        if (self.traitCollection.userInterfaceStyle == UIUserInterfaceStyleLight) {
+            startColor = [UIColor colorWithWhite:0.95 alpha:1.0];
+            endColor = [UIColor colorWithWhite:0.82 alpha:1.0];
+        }
+        else {
+            startColor = [UIColor colorWithRed:0.06 green:0.07 blue:0.10 alpha:1.0];
+            endColor = [UIColor blackColor];
+        }
+    }
+    else {
+        startColor = [UIColor colorWithRed:0.06 green:0.07 blue:0.10 alpha:1.0];
+        endColor = [UIColor blackColor];
+    }
+    
+    _tvosBackgroundGradientLayer.colors = @[
+        (__bridge id)startColor.CGColor,
+        (__bridge id)endColor.CGColor
+    ];
 }
 #endif
 

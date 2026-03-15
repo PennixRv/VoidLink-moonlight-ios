@@ -10,6 +10,7 @@
 
 @implementation UIComputerView {
     TemporaryHost* _host;
+    UIVisualEffectView* _cardBackground;
     UIImageView* _hostIcon;
     UILabel* _hostLabel;
     UIImageView* _hostOverlay;
@@ -40,12 +41,26 @@ static const int LABEL_DY = 20;
     }
 #endif
     
+    // tvOS-style "material" card behind the host icon. Keep this lightweight and
+    // focus-engine friendly by avoiding custom focus environments.
+#if TARGET_OS_TV
+    _cardBackground = [[UIVisualEffectView alloc] initWithEffect:[UIBlurEffect effectWithStyle:UIBlurEffectStyleDark]];
+    _cardBackground.frame = self.bounds;
+    _cardBackground.userInteractionEnabled = NO;
+    _cardBackground.alpha = 0.65;
+    _cardBackground.clipsToBounds = YES;
+    _cardBackground.layer.cornerRadius = 32;
+    [self addSubview:_cardBackground];
+#endif
+
     _hostIcon = [[UIImageView alloc] initWithFrame:self.frame];
     [_hostIcon setImage:[UIImage imageNamed:@"Computer"]];
     
     self.layer.shadowColor = [[UIColor blackColor] CGColor];
-    self.layer.shadowOffset = CGSizeMake(5,8);
+    self.layer.shadowOffset = CGSizeMake(0, 18);
     self.layer.shadowOpacity = 0.3;
+    self.layer.shadowRadius = 24.0;
+    self.clipsToBounds = NO;
 
     [self addTarget:self action:@selector(hostButtonSelected:) forControlEvents:UIControlEventTouchDown];
     [self addTarget:self action:@selector(hostButtonDeselected:) forControlEvents:UIControlEventTouchUpInside | UIControlEventTouchCancel | UIControlEventTouchDragExit];
@@ -76,6 +91,8 @@ static const int LABEL_DY = 20;
     _hostIcon.clipsToBounds = NO;
     _hostIcon.adjustsImageWhenAncestorFocused = YES;
     _hostIcon.masksFocusEffectToContents = YES;
+    _hostIcon.layer.cornerRadius = 32.0;
+    _hostIcon.clipsToBounds = YES;
     
     self.adjustsImageWhenHighlighted = NO;
     
@@ -96,6 +113,28 @@ static const int LABEL_DY = 20;
     
     return self;
 }
+
+#if TARGET_OS_TV
+- (void)didUpdateFocusInContext:(UIFocusUpdateContext *)context withAnimationCoordinator:(UIFocusAnimationCoordinator *)coordinator {
+    [super didUpdateFocusInContext:context withAnimationCoordinator:coordinator];
+    
+    BOOL nextIsSelf = (context.nextFocusedView == self);
+    BOOL prevIsSelf = (context.previouslyFocusedView == self);
+    if (!nextIsSelf && !prevIsSelf) {
+        return;
+    }
+    
+    CGFloat targetScale = nextIsSelf ? 1.08 : 1.0;
+    CGFloat targetShadowOpacity = nextIsSelf ? 0.65 : 0.3;
+    CGFloat targetMaterialAlpha = nextIsSelf ? 0.85 : 0.65;
+    
+    [coordinator addCoordinatedAnimations:^{
+        self.transform = CGAffineTransformMakeScale(targetScale, targetScale);
+        self.layer.shadowOpacity = targetShadowOpacity;
+        self->_cardBackground.alpha = targetMaterialAlpha;
+    } completion:nil];
+}
+#endif
 
 - (void) hostButtonSelected:(id)sender {
     _hostIcon.layer.opacity = 0.5f;
