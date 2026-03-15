@@ -961,16 +961,20 @@ static NSMutableSet* hostList;
     [_menuRecognizer addTarget:self action: @selector(showHostSelectionView)];
     _menuRecognizer.allowedPressTypes = [[NSArray alloc] initWithObjects:[NSNumber numberWithLong:UIPressTypeMenu], nil];
 
-    // Prefer dynamic system colors so the UI adapts to tvOS appearance changes.
+    // tvOS doesn't expose the full set of iOS 13 system dynamic colors, so we
+    // do a minimal appearance-aware setup here.
+    UINavigationBar* navBar = self.navigationController.navigationBar;
+    UIColor* foregroundColor = [UIColor whiteColor];
+    UIColor* backgroundColor = [UIColor blackColor];
     if (@available(tvOS 13.0, *)) {
-        UINavigationBar* navBar = self.navigationController.navigationBar;
-        navBar.barTintColor = [UIColor systemBackgroundColor];
-        navBar.tintColor = [UIColor labelColor];
-        navBar.titleTextAttributes = @{ NSForegroundColorAttributeName: [UIColor labelColor] };
+        if (self.traitCollection.userInterfaceStyle == UIUserInterfaceStyleLight) {
+            foregroundColor = [UIColor blackColor];
+            backgroundColor = [UIColor whiteColor];
+        }
     }
-    else {
-        self.navigationController.navigationBar.titleTextAttributes = @{ NSForegroundColorAttributeName: [UIColor whiteColor] };
-    }
+    navBar.barTintColor = backgroundColor;
+    navBar.tintColor = foregroundColor;
+    navBar.titleTextAttributes = @{ NSForegroundColorAttributeName: foregroundColor };
 #endif
     
     _loadingFrame = [self.storyboard instantiateViewControllerWithIdentifier:@"loadingFrame"];

@@ -52,11 +52,11 @@ static const int LABEL_DY = 20;
     
     _hostLabel = [[UILabel alloc] init];
 #if TARGET_OS_TV
+    _hostLabel.textColor = [UIColor whiteColor];
     if (@available(tvOS 13.0, *)) {
-        _hostLabel.textColor = [UIColor labelColor];
-    }
-    else {
-        _hostLabel.textColor = [UIColor whiteColor];
+        if (self.traitCollection.userInterfaceStyle == UIUserInterfaceStyleLight) {
+            _hostLabel.textColor = [UIColor blackColor];
+        }
     }
     _hostLabel.font = [UIFont systemFontOfSize:32 weight:UIFontWeightMedium];
 #else
