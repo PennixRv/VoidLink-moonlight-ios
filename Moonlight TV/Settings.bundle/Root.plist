@@ -49,11 +49,13 @@
 			<array>
 				<string>30</string>
 				<string>60</string>
+				<string>120</string>
 			</array>
 			<key>Titles</key>
 			<array>
 				<string>30 FPS</string>
 				<string>60 FPS</string>
+				<string>120 FPS</string>
 			</array>
 		</dict>
 		<dict>
@@ -78,6 +80,7 @@
 				<string>70 Mbps</string>
 				<string>80 Mbps</string>
 				<string>100 Mbps</string>
+				<string>120 Mbps</string>
 				<string>150 Mbps</string>
 			</array>
 			<key>Values</key>
@@ -93,6 +96,7 @@
 				<string>70000</string>
 				<string>80000</string>
 				<string>100000</string>
+				<string>120000</string>
 				<string>150000</string>
 			</array>
 		</dict>

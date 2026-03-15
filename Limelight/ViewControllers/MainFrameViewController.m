@@ -613,13 +613,19 @@ static NSMutableSet* hostList;
     TemporarySettings* streamSettings = [dataMan getSettings];
     
     _streamConfig.frameRate = [streamSettings.framerate intValue];
+#if !TARGET_OS_TV
     if (@available(iOS 10.3, *)) {
-        // Don't stream more FPS than the display can show
+        // Don't stream more FPS than the display can show.
+        //
+        // On tvOS, we allow requesting higher stream rates (ex: 120 FPS) and rely on
+        // AVDisplayManager's preferred display criteria to negotiate an appropriate
+        // output mode.
         if (_streamConfig.frameRate > [UIScreen mainScreen].maximumFramesPerSecond) {
             _streamConfig.frameRate = (int)[UIScreen mainScreen].maximumFramesPerSecond;
             Log(LOG_W, @"Clamping FPS to maximum refresh rate: %d", _streamConfig.frameRate);
         }
     }
+#endif
     
     _streamConfig.height = [streamSettings.height intValue];
     _streamConfig.width = [streamSettings.width intValue];
@@ -954,8 +960,17 @@ static NSMutableSet* hostList;
     _menuRecognizer = [[UITapGestureRecognizer alloc] init];
     [_menuRecognizer addTarget:self action: @selector(showHostSelectionView)];
     _menuRecognizer.allowedPressTypes = [[NSArray alloc] initWithObjects:[NSNumber numberWithLong:UIPressTypeMenu], nil];
-    
-    self.navigationController.navigationBar.titleTextAttributes = [NSDictionary dictionaryWithObject:[UIColor whiteColor] forKey:NSForegroundColorAttributeName];
+
+    // Prefer dynamic system colors so the UI adapts to tvOS appearance changes.
+    if (@available(tvOS 13.0, *)) {
+        UINavigationBar* navBar = self.navigationController.navigationBar;
+        navBar.barTintColor = [UIColor systemBackgroundColor];
+        navBar.tintColor = [UIColor labelColor];
+        navBar.titleTextAttributes = @{ NSForegroundColorAttributeName: [UIColor labelColor] };
+    }
+    else {
+        self.navigationController.navigationBar.titleTextAttributes = @{ NSForegroundColorAttributeName: [UIColor whiteColor] };
+    }
 #endif
     
     _loadingFrame = [self.storyboard instantiateViewControllerWithIdentifier:@"loadingFrame"];

@@ -51,7 +51,17 @@ static const int LABEL_DY = 20;
     [self addTarget:self action:@selector(hostButtonDeselected:) forControlEvents:UIControlEventTouchUpInside | UIControlEventTouchCancel | UIControlEventTouchDragExit];
     
     _hostLabel = [[UILabel alloc] init];
+#if TARGET_OS_TV
+    if (@available(tvOS 13.0, *)) {
+        _hostLabel.textColor = [UIColor labelColor];
+    }
+    else {
+        _hostLabel.textColor = [UIColor whiteColor];
+    }
+    _hostLabel.font = [UIFont systemFontOfSize:32 weight:UIFontWeightMedium];
+#else
     _hostLabel.textColor = [UIColor whiteColor];
+#endif
     
     _hostOverlay = [[UIImageView alloc] initWithFrame:CGRectMake(self.frame.size.width / 3, _hostIcon.frame.size.height / 4, _hostIcon.frame.size.width / 3, self.frame.size.height / 3)];
     _hostSpinner = [[UIActivityIndicatorView alloc] initWithActivityIndicatorStyle:UIActivityIndicatorViewStyleWhiteLarge];

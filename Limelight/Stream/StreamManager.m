@@ -179,14 +179,30 @@
     }
     
     float interval = stats.endTime - stats.startTime;
-    return [NSString stringWithFormat:@"Video stream: %dx%d %.2f FPS (Codec: %@)\nFrames dropped by your network connection: %.2f%%\nAverage network latency: %@%@",
+
+#if TARGET_OS_TV
+    NSString* displayInfo;
+    if (@available(tvOS 10.3, *)) {
+        displayInfo = [NSString stringWithFormat:@"\nRequested FPS: %d (Display max: %ld)",
+                       _config.frameRate,
+                       (long)[UIScreen mainScreen].maximumFramesPerSecond];
+    }
+    else {
+        displayInfo = [NSString stringWithFormat:@"\nRequested FPS: %d", _config.frameRate];
+    }
+#else
+    NSString* displayInfo = @"";
+#endif
+
+    return [NSString stringWithFormat:@"Video stream: %dx%d %.2f FPS (Codec: %@)\nFrames dropped by your network connection: %.2f%%\nAverage network latency: %@%@%@",
             _config.width,
             _config.height,
             stats.totalFrames / interval,
             [_connection getActiveCodecName],
             stats.networkDroppedFrames / interval,
             latencyString,
-            hostProcessingString];
+            hostProcessingString,
+            displayInfo];
 }
 
 @end
