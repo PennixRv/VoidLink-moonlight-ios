@@ -116,7 +116,6 @@ static const float REFRESH_CYCLE = 1.0f;
 - (void)stop {
     _animating = NO;
     [_label.layer removeAllAnimations];
-    [_label removeAllAnimations];
     _label.transform = CGAffineTransformIdentity;
     _label.frame = self.bounds;
 }
