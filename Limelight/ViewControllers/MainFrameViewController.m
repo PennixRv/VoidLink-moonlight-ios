@@ -816,8 +816,8 @@ static NSMutableSet* hostList;
                                                 if (quitResponse.statusCode != 200) {
                                                     UIAlertController* alert = [UIAlertController alertControllerWithTitle:VLTVOS_STR(@"Quitting App Failed", @"退出应用失败")
                                                                                                 message:VLTVOS_STR(@"Failed to quit app. If this app was started by "
-                                                             "another device, you'll need to quit from that device."
-                                                                                                          @"无法退出应用。\n\n如果该应用是由其他设备启动的，你需要在那台设备上退出。")
+                                                                                                                   "another device, you'll need to quit from that device.",
+                                                                                                                   @"无法退出应用。\n\n如果该应用是由其他设备启动的，你需要在那台设备上退出。")
                                                                                          preferredStyle:UIAlertControllerStyleAlert];
                                                     [alert addAction:[UIAlertAction actionWithTitle:VLTVOS_STR(@"OK", @"确定") style:UIAlertActionStyleDefault handler:nil]];
                                                     dispatch_async(dispatch_get_main_queue(), ^{
@@ -1591,14 +1591,13 @@ static NSMutableSet* hostList;
 }
 #endif
 
-- (void)didUpdateFocusInContext:(UIFocusUpdateContext *)context withAnimationCoordinator:(UIFocusAnimationCoordinator *)coordinator {
-    
 #if !TARGET_OS_TV
+- (void)didUpdateFocusInContext:(UIFocusUpdateContext *)context withAnimationCoordinator:(UIFocusAnimationCoordinator *)coordinator {
     if (context.nextFocusedView != nil) {
         [context.nextFocusedView setAlpha:0.8];
     }
     [context.previouslyFocusedView setAlpha:1.0];
-#endif
 }
+#endif
 
 @end
