@@ -25,4 +25,10 @@
 - (id) initWithApp:(TemporaryApp*)app cache:(NSCache*)cache andCallback:(id<AppCallback>)callback;
 - (void) updateAppImage;
 
+#if TARGET_OS_TV
+// Called by the collection view focus handler when the cell (rather than the button itself)
+// becomes focused. Used for UI-only effects like marquee.
+- (void) tvosSetAncestorFocused:(BOOL)focused;
+#endif
+
 @end

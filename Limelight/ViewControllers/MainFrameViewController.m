@@ -27,6 +27,7 @@
 #import "TemporaryApp.h"
 #import "IdManager.h"
 #import "ConnectionHelper.h"
+#import "VLTVOSUI.h"
 
 #if !TARGET_OS_TV
 #import "SettingsViewController.h"
@@ -73,10 +74,13 @@ static NSMutableSet* hostList;
     // Needs to be synchronous to ensure the alert is shown before any potential
     // failure callback could be invoked.
     dispatch_sync(dispatch_get_main_queue(), ^{
-        self->_pairAlert = [UIAlertController alertControllerWithTitle:@"Pairing"
-                                                               message:[NSString stringWithFormat:@"Enter the following PIN on the host machine: %@\n\nIf your host PC is running Sunshine, navigate to the Sunshine web UI to enter the PIN.", PIN]
+        NSString* pairingTitle = VLTVOS_STR(@"Pairing", @"配对");
+        NSString* pairingMessageFormat = VLTVOS_STR(@"Enter the following PIN on the host machine: %@\n\nIf your host PC is running Sunshine, navigate to the Sunshine web UI to enter the PIN.",
+                                                    @"请在主机上输入以下 PIN：%@\n\n如果你的主机运行的是 Sunshine，请打开 Sunshine 的 Web 管理页面并输入该 PIN。");
+        self->_pairAlert = [UIAlertController alertControllerWithTitle:pairingTitle
+                                                               message:[NSString stringWithFormat:pairingMessageFormat, PIN]
                                                         preferredStyle:UIAlertControllerStyleAlert];
-        [self->_pairAlert addAction:[UIAlertAction actionWithTitle:@"Cancel" style:UIAlertActionStyleDestructive handler:^(UIAlertAction* action) {
+        [self->_pairAlert addAction:[UIAlertAction actionWithTitle:VLTVOS_STR(@"Cancel", @"取消") style:UIAlertActionStyleDestructive handler:^(UIAlertAction* action) {
             self->_pairAlert = nil;
             [self->_discMan startDiscovery];
             [self hideLoadingFrame: ^{
@@ -88,11 +92,11 @@ static NSMutableSet* hostList;
 }
 
 - (void)displayPairingFailureDialog:(NSString *)message {
-    UIAlertController* failedDialog = [UIAlertController alertControllerWithTitle:@"Pairing Failed"
+    UIAlertController* failedDialog = [UIAlertController alertControllerWithTitle:VLTVOS_STR(@"Pairing Failed", @"配对失败")
                                                                           message:message
                                                                    preferredStyle:UIAlertControllerStyleAlert];
     [Utils addHelpOptionToDialog:failedDialog];
-    [failedDialog addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleDefault handler:nil]];
+    [failedDialog addAction:[UIAlertAction actionWithTitle:VLTVOS_STR(@"OK", @"确定") style:UIAlertActionStyleDefault handler:nil]];
     
     [_discMan startDiscovery];
     
@@ -143,10 +147,10 @@ static NSMutableSet* hostList;
         self.title = _selectedHost.name;
     }
     else if ([hostList count] == 0) {
-        self.title = @"Searching for PCs on your network...";
+        self.title = VLTVOS_STR(@"Searching for PCs on your network...", @"正在搜索局域网中的主机...");
     }
     else {
-        self.title = @"Select Host";
+        self.title = VLTVOS_STR(@"Select Host", @"选择主机");
     }
 }
 
@@ -190,11 +194,11 @@ static NSMutableSet* hostList;
                     return;
                 }
                 
-                UIAlertController* applistAlert = [UIAlertController alertControllerWithTitle:@"Connection Interrupted"
+                UIAlertController* applistAlert = [UIAlertController alertControllerWithTitle:VLTVOS_STR(@"Connection Interrupted", @"连接中断")
                                                                                       message:appListResp.statusMessage
                                                                                preferredStyle:UIAlertControllerStyleAlert];
                 [Utils addHelpOptionToDialog:applistAlert];
-                [applistAlert addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleDefault handler:nil]];
+                [applistAlert addAction:[UIAlertAction actionWithTitle:VLTVOS_STR(@"OK", @"确定") style:UIAlertActionStyleDefault handler:nil]];
                 [self hideLoadingFrame: ^{
                     [self showHostSelectionView];
                     [[self activeViewController] presentViewController:applistAlert animated:YES completion:nil];
@@ -327,11 +331,11 @@ static NSMutableSet* hostList;
 }
 
 - (void)displayDnsFailedDialog {
-    UIAlertController* alert = [UIAlertController alertControllerWithTitle:@"Network Error"
-                                                                   message:@"Failed to resolve host."
+    UIAlertController* alert = [UIAlertController alertControllerWithTitle:VLTVOS_STR(@"Network Error", @"网络错误")
+                                                                   message:VLTVOS_STR(@"Failed to resolve host.", @"无法解析主机地址。")
                                                             preferredStyle:UIAlertControllerStyleAlert];
     [Utils addHelpOptionToDialog:alert];
-    [alert addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleDefault handler:nil]];
+    [alert addAction:[UIAlertAction actionWithTitle:VLTVOS_STR(@"OK", @"确定") style:UIAlertActionStyleDefault handler:nil]];
     [[self activeViewController] presentViewController:alert animated:YES completion:nil];
 }
 
@@ -400,11 +404,11 @@ static NSMutableSet* hostList;
                         return;
                     }
                     
-                    UIAlertController* applistAlert = [UIAlertController alertControllerWithTitle:@"Connection Failed"
+                    UIAlertController* applistAlert = [UIAlertController alertControllerWithTitle:VLTVOS_STR(@"Connection Failed", @"连接失败")
                                                                             message:serverInfoResp.statusMessage
                                                                                    preferredStyle:UIAlertControllerStyleAlert];
                     [Utils addHelpOptionToDialog:applistAlert];
-                    [applistAlert addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleDefault handler:nil]];
+                    [applistAlert addAction:[UIAlertAction actionWithTitle:VLTVOS_STR(@"OK", @"确定") style:UIAlertActionStyleDefault handler:nil]];
                     
                     // Only display an alert if this was the result of a real
                     // user action, not just passively entering the foreground again
@@ -461,20 +465,20 @@ static NSMutableSet* hostList;
     
     switch (host.state) {
         case StateOffline:
-            message = @"Offline";
+            message = VLTVOS_STR(@"Offline", @"离线");
             break;
             
         case StateOnline:
             if (host.pairState == PairStatePaired) {
-                message = @"Online - Paired";
+                message = VLTVOS_STR(@"Online - Paired", @"在线（已配对）");
             }
             else {
-                message = @"Online - Not Paired";
+                message = VLTVOS_STR(@"Online - Not Paired", @"在线（未配对）");
             }
             break;
         
         case StateUnknown:
-            message = @"Connecting";
+            message = VLTVOS_STR(@"Connecting", @"连接中");
             break;
             
         default:
@@ -483,22 +487,24 @@ static NSMutableSet* hostList;
     
     UIAlertController* longClickAlert = [UIAlertController alertControllerWithTitle:host.name message:message preferredStyle:UIAlertControllerStyleActionSheet];
     if (host.state != StateOnline) {
-        [longClickAlert addAction:[UIAlertAction actionWithTitle:@"Wake PC" style:UIAlertActionStyleDefault handler:^(UIAlertAction* action){
-            UIAlertController* wolAlert = [UIAlertController alertControllerWithTitle:@"Wake-On-LAN" message:@"" preferredStyle:UIAlertControllerStyleAlert];
-            [wolAlert addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleDefault handler:nil]];
+        [longClickAlert addAction:[UIAlertAction actionWithTitle:VLTVOS_STR(@"Wake PC", @"唤醒主机") style:UIAlertActionStyleDefault handler:^(UIAlertAction* action){
+            UIAlertController* wolAlert = [UIAlertController alertControllerWithTitle:VLTVOS_STR(@"Wake-On-LAN", @"网络唤醒 (WOL)") message:@"" preferredStyle:UIAlertControllerStyleAlert];
+            [wolAlert addAction:[UIAlertAction actionWithTitle:VLTVOS_STR(@"OK", @"确定") style:UIAlertActionStyleDefault handler:nil]];
             if (host.mac == nil || [host.mac isEqualToString:@"00:00:00:00:00:00"]) {
-                wolAlert.message = @"Host MAC unknown, unable to send WOL Packet";
+                wolAlert.message = VLTVOS_STR(@"Host MAC unknown, unable to send WOL Packet",
+                                              @"未知主机 MAC 地址，无法发送唤醒包。");
             } else {
                 dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
                     [WakeOnLanManager wakeHost:host];
                 });
-                wolAlert.message = @"Successfully sent wake-up request. It may take a few moments for the PC to wake. If it never wakes up, ensure it's properly configured for Wake-on-LAN.";
+                wolAlert.message = VLTVOS_STR(@"Successfully sent wake-up request. It may take a few moments for the PC to wake. If it never wakes up, ensure it's properly configured for Wake-on-LAN.",
+                                              @"已发送唤醒请求。主机可能需要一点时间才能开机。\n\n如果一直没有唤醒，请确认主机已正确配置 Wake-on-LAN。");
             }
             [[self activeViewController] presentViewController:wolAlert animated:YES completion:nil];
         }]];
     }
     else if (host.pairState == PairStatePaired) {
-        [longClickAlert addAction:[UIAlertAction actionWithTitle:@"View All Apps" style:UIAlertActionStyleDefault handler:^(UIAlertAction* action){
+        [longClickAlert addAction:[UIAlertAction actionWithTitle:VLTVOS_STR(@"View All Apps", @"显示全部应用") style:UIAlertActionStyleDefault handler:^(UIAlertAction* action){
             self->_showHiddenApps = YES;
             [self hostClicked:host view:view];
         }]];
@@ -511,7 +517,7 @@ static NSMutableSet* hostList;
         }
 #endif
     }
-    [longClickAlert addAction:[UIAlertAction actionWithTitle:@"Test Network" style:UIAlertActionStyleDefault handler:^(UIAlertAction* action) {
+    [longClickAlert addAction:[UIAlertAction actionWithTitle:VLTVOS_STR(@"Test Network", @"网络测试") style:UIAlertActionStyleDefault handler:^(UIAlertAction* action) {
         [self showLoadingFrame:^{
             dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
                 // Perform the network test on a GCD worker thread. It may take a while.
@@ -521,19 +527,23 @@ static NSMutableSet* hostList;
                         NSString* message;
                         
                         if (portTestResult == 0) {
-                            message = @"This network does not appear to be blocking Moonlight. If you still have trouble connecting, check your PC's firewall settings.\n\nVisit the Moonlight Setup Guide on GitHub for additional setup help and troubleshooting steps.";
+                            message = VLTVOS_STR(@"This network does not appear to be blocking Moonlight. If you still have trouble connecting, check your PC's firewall settings.\n\nVisit the Moonlight Setup Guide on GitHub for additional setup help and troubleshooting steps.",
+                                                 @"当前网络看起来没有阻止 Moonlight。\n\n如果你仍然无法连接，请检查主机防火墙设置。\n\n如需更多排障步骤，请查看 Moonlight 的安装与排障文档。");
                         }
                         else if (portTestResult == ML_TEST_RESULT_INCONCLUSIVE) {
-                            message = @"The network test could not be performed because none of Moonlight's connection testing servers were reachable. Check your Internet connection or try again later.";
+                            message = VLTVOS_STR(@"The network test could not be performed because none of Moonlight's connection testing servers were reachable. Check your Internet connection or try again later.",
+                                                 @"网络测试无法完成：无法连接到 Moonlight 的测试服务器。\n\n请检查你的互联网连接，或稍后再试。");
                         }
                         else {
                             char blockedPorts[512];
                             LiStringifyPortFlags(portTestResult, "\n", blockedPorts, sizeof(blockedPorts));
-                            message = [NSString stringWithFormat:@"Your current network connection seems to be blocking Moonlight. Streaming may not work while connected to this network.\n\nThe following network ports were blocked:\n%s", blockedPorts];
+                            NSString* fmt = VLTVOS_STR(@"Your current network connection seems to be blocking Moonlight. Streaming may not work while connected to this network.\n\nThe following network ports were blocked:\n%s",
+                                                       @"当前网络看起来阻止了 Moonlight。\n\n在此网络下可能无法正常串流。\n\n以下端口被阻止：\n%s");
+                            message = [NSString stringWithFormat:fmt, blockedPorts];
                         }
                         
-                        UIAlertController* netTestAlert = [UIAlertController alertControllerWithTitle:@"Network Test Complete" message:message preferredStyle:UIAlertControllerStyleAlert];
-                        [netTestAlert addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleDefault handler:nil]];
+                        UIAlertController* netTestAlert = [UIAlertController alertControllerWithTitle:VLTVOS_STR(@"Network Test Complete", @"网络测试完成") message:message preferredStyle:UIAlertControllerStyleAlert];
+                        [netTestAlert addAction:[UIAlertAction actionWithTitle:VLTVOS_STR(@"OK", @"确定") style:UIAlertActionStyleDefault handler:nil]];
                         [[self activeViewController] presentViewController:netTestAlert animated:YES completion:nil];
                     }];
                 });
@@ -550,7 +560,7 @@ static NSMutableSet* hostList;
         }]];
     }
 #endif
-    [longClickAlert addAction:[UIAlertAction actionWithTitle:@"Remove Host" style:UIAlertActionStyleDestructive handler:^(UIAlertAction* action) {
+    [longClickAlert addAction:[UIAlertAction actionWithTitle:VLTVOS_STR(@"Remove Host", @"移除主机") style:UIAlertActionStyleDestructive handler:^(UIAlertAction* action) {
         [self->_discMan removeHostFromDiscovery:host];
         DataManager* dataMan = [[DataManager alloc] init];
         [dataMan removeHost:host];
@@ -560,7 +570,7 @@ static NSMutableSet* hostList;
         }
         
     }]];
-    [longClickAlert addAction:[UIAlertAction actionWithTitle:@"Cancel" style:UIAlertActionStyleCancel handler:nil]];
+    [longClickAlert addAction:[UIAlertAction actionWithTitle:VLTVOS_STR(@"Cancel", @"取消") style:UIAlertActionStyleCancel handler:nil]];
     
     // these two lines are required for iPad support of UIAlertSheet
     longClickAlert.popoverPresentationController.sourceView = view;
@@ -571,9 +581,12 @@ static NSMutableSet* hostList;
 
 - (void) addHostClicked {
     Log(LOG_D, @"Clicked add host");
-    UIAlertController* alertController = [UIAlertController alertControllerWithTitle:@"Add Host Manually" message:@"If Moonlight doesn't find your local gaming PC automatically,\nenter the IP address of your PC" preferredStyle:UIAlertControllerStyleAlert];
-    [alertController addAction:[UIAlertAction actionWithTitle:@"Cancel" style:UIAlertActionStyleCancel handler:nil]];
-    [alertController addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleDefault handler:^(UIAlertAction* action){
+    UIAlertController* alertController = [UIAlertController alertControllerWithTitle:VLTVOS_STR(@"Add Host Manually", @"手动添加主机")
+                                                                            message:VLTVOS_STR(@"If Moonlight doesn't find your local gaming PC automatically,\nenter the IP address of your PC",
+                                                                                              @"如果 Moonlight 没有自动发现你的主机，请输入主机的 IP 地址。")
+                                                                     preferredStyle:UIAlertControllerStyleAlert];
+    [alertController addAction:[UIAlertAction actionWithTitle:VLTVOS_STR(@"Cancel", @"取消") style:UIAlertActionStyleCancel handler:nil]];
+    [alertController addAction:[UIAlertAction actionWithTitle:VLTVOS_STR(@"OK", @"确定") style:UIAlertActionStyleDefault handler:^(UIAlertAction* action){
         NSString* hostAddress = [((UITextField*)[[alertController textFields] objectAtIndex:0]).text trim];
         [self showLoadingFrame:^{
             dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_HIGH, 0), ^{
@@ -591,12 +604,13 @@ static NSMutableSet* hostList;
                         unsigned int portTestResults = LiTestClientConnectivity(CONN_TEST_SERVER, 443,
                                                                                 ML_PORT_FLAG_TCP_47984 | ML_PORT_FLAG_TCP_47989);
                         if (portTestResults != ML_TEST_RESULT_INCONCLUSIVE && portTestResults != 0) {
-                            error = [error stringByAppendingString:@"\n\nYour device's network connection is blocking Moonlight. Streaming may not work while connected to this network."];
+                            error = [error stringByAppendingString:VLTVOS_STR(@"\n\nYour device's network connection is blocking Moonlight. Streaming may not work while connected to this network.",
+                                                                             @"\n\n当前网络看起来阻止了 Moonlight。在此网络下可能无法正常串流。")];
                         }
                         
-                        UIAlertController* hostNotFoundAlert = [UIAlertController alertControllerWithTitle:@"Add Host Manually" message:error preferredStyle:UIAlertControllerStyleAlert];
+                        UIAlertController* hostNotFoundAlert = [UIAlertController alertControllerWithTitle:VLTVOS_STR(@"Add Host Manually", @"手动添加主机") message:error preferredStyle:UIAlertControllerStyleAlert];
                         [Utils addHelpOptionToDialog:hostNotFoundAlert];
-                        [hostNotFoundAlert addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleDefault handler:nil]];
+                        [hostNotFoundAlert addAction:[UIAlertAction actionWithTitle:VLTVOS_STR(@"OK", @"确定") style:UIAlertActionStyleDefault handler:nil]];
                         dispatch_async(dispatch_get_main_queue(), ^{
                             [self hideLoadingFrame:^{
                                 [[self activeViewController] presentViewController:hostNotFoundAlert animated:YES completion:nil];
@@ -738,14 +752,15 @@ static NSMutableSet* hostList;
     
     if (currentApp == nil || [app.id isEqualToString:currentApp.id]) {
         if (app.hidden) {
-            message = @"Hidden";
+            message = VLTVOS_STR(@"Hidden", @"已隐藏");
         }
         else {
             message = @"";
         }
     }
     else {
-        message = [NSString stringWithFormat:@"%@ is currently running", currentApp.name];
+        NSString* fmt = VLTVOS_STR(@"%@ is currently running", @"%@ 正在运行");
+        message = [NSString stringWithFormat:fmt, currentApp.name];
     }
     
     UIAlertController* alertController = [UIAlertController
@@ -754,7 +769,7 @@ static NSMutableSet* hostList;
                                           preferredStyle:UIAlertControllerStyleActionSheet];
     
     [alertController addAction:[UIAlertAction
-                                actionWithTitle:currentApp == nil ? @"Launch App" : ([app.id isEqualToString:currentApp.id] ? @"Resume App" : @"Resume Running App") style:UIAlertActionStyleDefault handler:^(UIAlertAction* action){
+                                actionWithTitle:currentApp == nil ? VLTVOS_STR(@"Launch App", @"启动应用") : ([app.id isEqualToString:currentApp.id] ? VLTVOS_STR(@"Resume App", @"继续应用") : VLTVOS_STR(@"Resume Running App", @"继续正在运行的应用")) style:UIAlertActionStyleDefault handler:^(UIAlertAction* action){
         if (currentApp != nil) {
             Log(LOG_I, @"Resuming application: %@", currentApp.name);
             [self prepareToStreamApp:currentApp];
@@ -769,7 +784,7 @@ static NSMutableSet* hostList;
     
     if (currentApp != nil) {
         [alertController addAction:[UIAlertAction actionWithTitle:
-                                    [app.id isEqualToString:currentApp.id] ? @"Quit App" : @"Quit Running App and Start" style:UIAlertActionStyleDestructive handler:^(UIAlertAction* action){
+                                    [app.id isEqualToString:currentApp.id] ? VLTVOS_STR(@"Quit App", @"退出应用") : VLTVOS_STR(@"Quit Running App and Start", @"退出当前应用并启动") style:UIAlertActionStyleDestructive handler:^(UIAlertAction* action){
                                         Log(LOG_I, @"Quitting application: %@", currentApp.name);
                                         [self showLoadingFrame: ^{
                                             dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
@@ -799,11 +814,12 @@ static NSMutableSet* hostList;
 
                                                 // If it fails, display an error and stop the current operation
                                                 if (quitResponse.statusCode != 200) {
-                                                    UIAlertController* alert = [UIAlertController alertControllerWithTitle:@"Quitting App Failed"
-                                                                                                message:@"Failed to quit app. If this app was started by "
+                                                    UIAlertController* alert = [UIAlertController alertControllerWithTitle:VLTVOS_STR(@"Quitting App Failed", @"退出应用失败")
+                                                                                                message:VLTVOS_STR(@"Failed to quit app. If this app was started by "
                                                              "another device, you'll need to quit from that device."
+                                                                                                          @"无法退出应用。\n\n如果该应用是由其他设备启动的，你需要在那台设备上退出。")
                                                                                          preferredStyle:UIAlertControllerStyleAlert];
-                                                    [alert addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleDefault handler:nil]];
+                                                    [alert addAction:[UIAlertAction actionWithTitle:VLTVOS_STR(@"OK", @"确定") style:UIAlertActionStyleDefault handler:nil]];
                                                     dispatch_async(dispatch_get_main_queue(), ^{
                                                         [self updateAppsForHost:app.host];
                                                         [self hideLoadingFrame: ^{
@@ -834,7 +850,7 @@ static NSMutableSet* hostList;
     }
 
     if (currentApp == nil || ![app.id isEqualToString:currentApp.id] || app.hidden) {
-        [alertController addAction:[UIAlertAction actionWithTitle:app.hidden ? @"Show App" : @"Hide App"
+        [alertController addAction:[UIAlertAction actionWithTitle:app.hidden ? VLTVOS_STR(@"Show App", @"显示应用") : VLTVOS_STR(@"Hide App", @"隐藏应用")
                                                             style:app.hidden ? UIAlertActionStyleDefault : UIAlertActionStyleDestructive
                                                           handler:^(UIAlertAction* action) {
             app.hidden = !app.hidden;
@@ -845,7 +861,7 @@ static NSMutableSet* hostList;
         }]];
     }
     
-    [alertController addAction:[UIAlertAction actionWithTitle:@"Cancel" style:UIAlertActionStyleCancel handler:nil]];
+    [alertController addAction:[UIAlertAction actionWithTitle:VLTVOS_STR(@"Cancel", @"取消") style:UIAlertActionStyleCancel handler:nil]];
 
     // these two lines are required for iPad support of UIAlertSheet
     alertController.popoverPresentationController.sourceView = view;
@@ -962,6 +978,7 @@ static NSMutableSet* hostList;
     // The settings button will direct the user into the Settings app on tvOS
     [_settingsButton setTarget:self];
     [_settingsButton setAction:@selector(openTvSettings:)];
+    _settingsButton.title = VLTVOS_STR(@"Settings", @"设置");
     
     // Restore focus on the selected app on view controller pop navigation
     self.restoresFocusAfterTransition = NO;
@@ -1053,6 +1070,45 @@ static NSMutableSet* hostList;
     }
 }
 
+- (void)didUpdateFocusInContext:(UIFocusUpdateContext *)context withAnimationCoordinator:(UIFocusAnimationCoordinator *)coordinator
+{
+    [super didUpdateFocusInContext:context withAnimationCoordinator:coordinator];
+
+    // The tvOS focus engine may focus either the UICollectionViewCell or its button subview.
+    // Drive UI-only effects (like marquee) from the containing cell to keep the experience consistent.
+    UICollectionViewCell* (^cellForView)(UIView*) = ^UICollectionViewCell* (UIView* view) {
+        UIView* v = view;
+        while (v != nil && ![v isKindOfClass:[UICollectionViewCell class]]) {
+            v = v.superview;
+        }
+        return (UICollectionViewCell*)v;
+    };
+
+    UIAppView* (^appViewForCell)(UICollectionViewCell*) = ^UIAppView* (UICollectionViewCell* cell) {
+        if (cell == nil) {
+            return nil;
+        }
+        for (UIView* sub in cell.contentView.subviews) {
+            if ([sub isKindOfClass:[UIAppView class]]) {
+                return (UIAppView*)sub;
+            }
+        }
+        return nil;
+    };
+
+    UICollectionViewCell* prevCell = cellForView(context.previouslyFocusedView);
+    UICollectionViewCell* nextCell = cellForView(context.nextFocusedView);
+    UIAppView* prevAppView = appViewForCell(prevCell);
+    UIAppView* nextAppView = appViewForCell(nextCell);
+
+    if (prevAppView != nil && prevAppView != nextAppView) {
+        [prevAppView tvosSetAncestorFocused:NO];
+    }
+    if (nextAppView != nil) {
+        [nextAppView tvosSetAncestorFocused:YES];
+    }
+}
+
 - (void)openTvSettings:(id)sender
 {
     [[UIApplication sharedApplication] openURL:[NSURL URLWithString:UIApplicationOpenSettingsURLString] options:@{} completionHandler:nil];
@@ -1083,8 +1139,14 @@ static NSMutableSet* hostList;
     _tvosBackgroundView.userInteractionEnabled = NO;
     _tvosBackgroundView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
 
-    // Keep the Hosts view background simple and high-contrast. The card views provide
-    // their own material and focus feedback, so a busy gradient tends to look noisy.
+    // Subtle gradient gives depth without looking "busy".
+    _tvosBackgroundGradientLayer = [CAGradientLayer layer];
+    _tvosBackgroundGradientLayer.startPoint = CGPointMake(0.5, 0.0);
+    _tvosBackgroundGradientLayer.endPoint = CGPointMake(0.5, 1.0);
+    _tvosBackgroundGradientLayer.locations = @[ @0.0, @1.0 ];
+    _tvosBackgroundGradientLayer.frame = _tvosBackgroundView.bounds;
+    [_tvosBackgroundView.layer insertSublayer:_tvosBackgroundGradientLayer atIndex:0];
+
     [self tvosUpdateBackgroundGradientColorsIfNeeded];
     
     self.collectionView.backgroundView = _tvosBackgroundView;
@@ -1096,28 +1158,28 @@ static NSMutableSet* hostList;
     if (_tvosBackgroundView == nil) {
         return;
     }
-    
-    UIColor* backgroundColor = [UIColor blackColor];
-    
+
+    UIColor* bottomColor = VLTVOSBackgroundBaseColor(self.traitCollection);
+    UIColor* topColor = bottomColor;
+
     if (@available(tvOS 13.0, *)) {
         if (self.traitCollection.userInterfaceStyle == UIUserInterfaceStyleLight) {
-            backgroundColor = [UIColor colorWithWhite:0.95 alpha:1.0];
+            topColor = [UIColor colorWithWhite:1.0 alpha:1.0];
         }
         else {
-            backgroundColor = [UIColor colorWithRed:0.06 green:0.07 blue:0.10 alpha:1.0];
+            topColor = [UIColor colorWithRed:0.10 green:0.11 blue:0.16 alpha:1.0];
         }
     }
     else {
-        backgroundColor = [UIColor colorWithRed:0.06 green:0.07 blue:0.10 alpha:1.0];
+        topColor = [UIColor colorWithRed:0.10 green:0.11 blue:0.16 alpha:1.0];
     }
-    
-    _tvosBackgroundView.backgroundColor = backgroundColor;
 
-    // Backward-compat: if a gradient layer exists from older builds, keep it in sync.
+    _tvosBackgroundView.backgroundColor = bottomColor;
+
     if (_tvosBackgroundGradientLayer != nil) {
         _tvosBackgroundGradientLayer.colors = @[
-            (__bridge id)backgroundColor.CGColor,
-            (__bridge id)backgroundColor.CGColor
+            (__bridge id)topColor.CGColor,
+            (__bridge id)bottomColor.CGColor
         ];
     }
 }
@@ -1444,22 +1506,29 @@ static NSMutableSet* hostList;
     TemporaryApp* app = _sortedAppList[indexPath.row];
     UIAppView* appView = [[UIAppView alloc] initWithApp:app cache:_boxArtCache andCallback:self];
     
-    if (appView.bounds.size.width > 10.0) {
-        CGFloat scale = cell.bounds.size.width / appView.bounds.size.width;
-        [appView setCenter:CGPointMake(appView.bounds.size.width / 2 * scale, appView.bounds.size.height / 2 * scale)];
-        appView.transform = CGAffineTransformMakeScale(scale, scale);
+    // Safely reuse cells without removing UIKit-managed subviews.
+    for (UIView* subview in [cell.contentView.subviews copy]) {
+        [subview removeFromSuperview];
     }
-    
-    [cell.subviews.firstObject removeFromSuperview]; // Remove a view that was previously added
-    [cell addSubview:appView];
-    
-    // Shadow opacity is controlled inside UIAppView based on whether the app
-    // is hidden or not during the update cycle.
+    cell.contentView.clipsToBounds = NO;
+    cell.backgroundColor = [UIColor clearColor];
+    cell.contentView.backgroundColor = [UIColor clearColor];
+
+    appView.frame = cell.contentView.bounds;
+    appView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+    [cell.contentView addSubview:appView];
+
+#if TARGET_OS_TV
+    // Let UIAppView own the focus shadow; keep the cell itself "flat".
+    cell.layer.shadowOpacity = 0.0;
+    cell.layer.shadowPath = nil;
+#else
     UIBezierPath *shadowPath = [UIBezierPath bezierPathWithRect:cell.bounds];
     cell.layer.masksToBounds = NO;
     cell.layer.shadowColor = [UIColor blackColor].CGColor;
     cell.layer.shadowOffset = CGSizeMake(1.0f, 5.0f);
     cell.layer.shadowPath = shadowPath.CGPath;
+#endif
     
 #if !TARGET_OS_TV
     cell.layer.borderWidth = 1;

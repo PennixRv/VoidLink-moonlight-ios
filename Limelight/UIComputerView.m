@@ -8,6 +8,10 @@
 
 #import "UIComputerView.h"
 
+#if TARGET_OS_TV
+#import "VLTVOSUI.h"
+#endif
+
 @implementation UIComputerView {
     TemporaryHost* _host;
     UIVisualEffectView* _cardBackground;
@@ -21,6 +25,8 @@
 #if TARGET_OS_TV
     UIInterpolatingMotionEffect* _motionEffectH;
     UIInterpolatingMotionEffect* _motionEffectV;
+    UIView* _statusBadgeContainer;
+    UILabel* _statusBadgeLabel;
 #endif
 }
 static const float REFRESH_CYCLE = 2.0f;
@@ -67,13 +73,8 @@ static const int LABEL_DY = 20;
     
     _hostLabel = [[UILabel alloc] init];
 #if TARGET_OS_TV
-    _hostLabel.textColor = [UIColor whiteColor];
-    if (@available(tvOS 13.0, *)) {
-        if (self.traitCollection.userInterfaceStyle == UIUserInterfaceStyleLight) {
-            _hostLabel.textColor = [UIColor blackColor];
-        }
-    }
-    _hostLabel.font = [UIFont systemFontOfSize:32 weight:UIFontWeightMedium];
+    _hostLabel.textColor = VLTVOSCardForegroundColor(self.traitCollection, NO);
+    _hostLabel.font = [UIFont systemFontOfSize:34 weight:UIFontWeightSemibold];
 #else
     _hostLabel.textColor = [UIColor whiteColor];
 #endif
@@ -86,15 +87,13 @@ static const int LABEL_DY = 20;
 
 #if TARGET_OS_TV
     // tvOS-style "material" card behind the host icon.
-    _cardBackground = [[UIVisualEffectView alloc] initWithEffect:[UIBlurEffect effectWithStyle:UIBlurEffectStyleDark]];
+    _cardBackground = [[UIVisualEffectView alloc] initWithEffect:[UIBlurEffect effectWithStyle:VLTVOSCardBlurStyle(self.traitCollection)]];
     _cardBackground.frame = _hostIcon.frame;
     _cardBackground.userInteractionEnabled = NO;
     _cardBackground.alpha = 0.7;
     _cardBackground.clipsToBounds = YES;
-    _cardBackground.layer.cornerRadius = 16.0;
-    if (@available(tvOS 13.0, *)) {
-        _cardBackground.layer.cornerCurve = kCACornerCurveContinuous;
-    }
+    _cardBackground.layer.cornerRadius = VLTVOSCardCornerRadius;
+    VLTVOSSetContinuousCornerIfAvailable(_cardBackground.layer);
     
     _selectedHighlightView = [[UIView alloc] initWithFrame:_cardBackground.bounds];
     _selectedHighlightView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
@@ -102,12 +101,26 @@ static const int LABEL_DY = 20;
     _selectedHighlightView.hidden = YES;
     [_cardBackground.contentView addSubview:_selectedHighlightView];
     
-    _motionEffectH = [[UIInterpolatingMotionEffect alloc] initWithKeyPath:@"center.x" type:UIInterpolatingMotionEffectTypeTiltAlongHorizontalAxis];
-    _motionEffectH.minimumRelativeValue = @(-8);
-    _motionEffectH.maximumRelativeValue = @(8);
-    _motionEffectV = [[UIInterpolatingMotionEffect alloc] initWithKeyPath:@"center.y" type:UIInterpolatingMotionEffectTypeTiltAlongVerticalAxis];
-    _motionEffectV.minimumRelativeValue = @(-8);
-    _motionEffectV.maximumRelativeValue = @(8);
+    _motionEffectH = VLTVOSCreateMotionEffect(@"center.x", UIInterpolatingMotionEffectTypeTiltAlongHorizontalAxis);
+    _motionEffectV = VLTVOSCreateMotionEffect(@"center.y", UIInterpolatingMotionEffectTypeTiltAlongVerticalAxis);
+
+    // A small corner badge for quick status scanning (online/offline/pairing).
+    _statusBadgeContainer = [[UIView alloc] initWithFrame:CGRectZero];
+    _statusBadgeContainer.userInteractionEnabled = NO;
+    _statusBadgeContainer.hidden = YES;
+    _statusBadgeContainer.backgroundColor = [UIColor colorWithRed:0.98 green:0.31 blue:0.55 alpha:0.95];
+    _statusBadgeContainer.layer.cornerRadius = 12.0;
+    if (@available(tvOS 11.0, *)) {
+        _statusBadgeContainer.layer.maskedCorners = kCALayerMinXMaxYCorner;
+    }
+    _statusBadgeContainer.layer.masksToBounds = YES;
+    [_cardBackground.contentView addSubview:_statusBadgeContainer];
+
+    _statusBadgeLabel = [[UILabel alloc] initWithFrame:CGRectZero];
+    _statusBadgeLabel.userInteractionEnabled = NO;
+    _statusBadgeLabel.textColor = [UIColor whiteColor];
+    _statusBadgeLabel.font = [UIFont systemFontOfSize:20 weight:UIFontWeightSemibold];
+    [_statusBadgeContainer addSubview:_statusBadgeLabel];
 #endif
     
 #if TARGET_OS_TV
@@ -142,6 +155,68 @@ static const int LABEL_DY = 20;
 }
 
 #if TARGET_OS_TV
+- (void)traitCollectionDidChange:(UITraitCollection *)previousTraitCollection {
+    [super traitCollectionDidChange:previousTraitCollection];
+
+    if (@available(tvOS 13.0, *)) {
+        if (previousTraitCollection.userInterfaceStyle != self.traitCollection.userInterfaceStyle) {
+            // Keep card blur and text colors consistent with the system appearance.
+            _cardBackground.effect = [UIBlurEffect effectWithStyle:VLTVOSCardBlurStyle(self.traitCollection)];
+            UIColor* fg = VLTVOSCardForegroundColor(self.traitCollection, self.isFocused);
+            _hostLabel.textColor = fg;
+            _hostIcon.tintColor = fg;
+            _hostOverlay.tintColor = fg;
+        }
+    }
+}
+
+- (void)tvosUpdateStatusBadge {
+    if (_statusBadgeContainer == nil || _statusBadgeLabel == nil) {
+        return;
+    }
+
+    NSString* text = nil;
+    UIColor* color = [UIColor colorWithRed:0.98 green:0.31 blue:0.55 alpha:0.95];
+
+    if (_host == nil) {
+        // Add-host tile doesn't need a badge.
+        text = nil;
+    }
+    else if (_host.state == StateOnline) {
+        if (_host.pairState == PairStateUnpaired) {
+            text = VLTVOS_STR(@"Pair", @"需配对");
+            color = [UIColor colorWithRed:0.98 green:0.62 blue:0.15 alpha:0.95];
+        }
+        else {
+            text = VLTVOS_STR(@"Online", @"在线");
+            color = [UIColor colorWithRed:0.23 green:0.78 blue:0.35 alpha:0.95];
+        }
+    }
+    else if (_host.state == StateOffline) {
+        text = VLTVOS_STR(@"Offline", @"离线");
+        color = [UIColor colorWithRed:0.95 green:0.23 blue:0.23 alpha:0.95];
+    }
+    else {
+        text = VLTVOS_STR(@"Connecting", @"连接中");
+        color = [UIColor colorWithRed:0.20 green:0.55 blue:0.95 alpha:0.95];
+    }
+
+    _statusBadgeContainer.hidden = (text == nil || text.length == 0);
+    _statusBadgeContainer.backgroundColor = color;
+    _statusBadgeLabel.text = text;
+    [_statusBadgeLabel sizeToFit];
+
+    // Layout: pin to top-right, with internal padding.
+    CGFloat paddingX = 10.0;
+    CGFloat paddingY = 6.0;
+    CGFloat w = _statusBadgeLabel.bounds.size.width + paddingX * 2;
+    CGFloat h = _statusBadgeLabel.bounds.size.height + paddingY * 2;
+    _statusBadgeContainer.frame = CGRectMake(_cardBackground.bounds.size.width - w, 0, w, h);
+    _statusBadgeLabel.frame = CGRectMake(paddingX, paddingY,
+                                        _statusBadgeContainer.bounds.size.width - paddingX * 2,
+                                        _statusBadgeContainer.bounds.size.height - paddingY * 2);
+}
+
 - (void)didUpdateFocusInContext:(UIFocusUpdateContext *)context withAnimationCoordinator:(UIFocusAnimationCoordinator *)coordinator {
     [super didUpdateFocusInContext:context withAnimationCoordinator:coordinator];
     
@@ -152,48 +227,24 @@ static const int LABEL_DY = 20;
     }
     
     BOOL focused = nextIsSelf;
-    CGFloat targetScale = focused ? 1.1 : 1.0;
-    CGFloat scaleDiff = (self.bounds.size.height * targetScale - self.bounds.size.height) / 2.0;
-    CGAffineTransform targetTransform = focused ? CGAffineTransformTranslate(CGAffineTransformMakeScale(targetScale, targetScale), 0, -scaleDiff) : CGAffineTransformIdentity;
+    CGAffineTransform targetTransform = VLTVOSFocusTransformForBounds(self.bounds, focused);
     
     [coordinator addCoordinatedAnimations:^{
         self.transform = targetTransform;
-        self.layer.shadowOffset = focused ? CGSizeMake(0, 16) : CGSizeMake(0, 0);
-        self.layer.shadowOpacity = focused ? 0.15 : 0.0;
-        self.layer.shadowRadius = focused ? 18.0 : 16.0;
-        self->_cardBackground.alpha = focused ? 0.9 : 0.7;
+        self.layer.shadowOffset = focused ? CGSizeMake(0, VLTVOSCardShadowOffsetYFocused) : CGSizeMake(0, 0);
+        self.layer.shadowOpacity = focused ? VLTVOSCardShadowOpacityFocused : VLTVOSCardShadowOpacityUnfocused;
+        self.layer.shadowRadius = focused ? VLTVOSCardShadowRadiusFocused : 16.0;
+        self->_cardBackground.alpha = focused ? 0.92 : 0.74;
     } completion:nil];
     
     _selectedHighlightView.hidden = !focused;
     
-    // Match Bilibili-style focus: white card when focused, dark card when not.
-    UIColor* focusedForeground = [UIColor blackColor];
-    UIColor* unfocusedForeground = [UIColor whiteColor];
-    if (@available(tvOS 13.0, *)) {
-        if (self.traitCollection.userInterfaceStyle == UIUserInterfaceStyleLight) {
-            unfocusedForeground = [UIColor blackColor];
-        }
-    }
-    _hostIcon.tintColor = focused ? focusedForeground : unfocusedForeground;
-    _hostOverlay.tintColor = focused ? focusedForeground : unfocusedForeground;
-    _hostLabel.textColor = focused ? focusedForeground : unfocusedForeground;
-    
-    if (focused) {
-        if (_motionEffectH != nil) {
-            [self addMotionEffect:_motionEffectH];
-        }
-        if (_motionEffectV != nil) {
-            [self addMotionEffect:_motionEffectV];
-        }
-    }
-    else {
-        if (_motionEffectH != nil) {
-            [self removeMotionEffect:_motionEffectH];
-        }
-        if (_motionEffectV != nil) {
-            [self removeMotionEffect:_motionEffectV];
-        }
-    }
+    UIColor* fg = VLTVOSCardForegroundColor(self.traitCollection, focused);
+    _hostIcon.tintColor = fg;
+    _hostOverlay.tintColor = fg;
+    _hostLabel.textColor = fg;
+
+    VLTVOSUpdateMotionEffectsForFocus(self, _motionEffectH, _motionEffectV, focused);
 }
 #endif
 
@@ -214,7 +265,7 @@ static const int LABEL_DY = 20;
     
     [self addTarget:self action:@selector(addClicked) forControlEvents:UIControlEventPrimaryActionTriggered];
     
-    [_hostLabel setText:@"Add Host Manually"];
+    [_hostLabel setText:VLTVOS_STR(@"Add Host Manually", @"手动添加主机")];
     [_hostLabel sizeToFit];
     
     [_hostOverlay setImage:[UIImage imageNamed:@"AddOverlayIcon"]];
@@ -284,6 +335,7 @@ static const int LABEL_DY = 20;
 #if TARGET_OS_TV
     // Keep the material card pinned to the icon region (not the label).
     _cardBackground.frame = _hostIcon.frame;
+    [self tvosUpdateStatusBadge];
 #endif
 }
 

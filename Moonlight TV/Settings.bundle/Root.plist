@@ -10,13 +10,13 @@
 			<key>Type</key>
 			<string>PSGroupSpecifier</string>
 			<key>Title</key>
-			<string>Basic Configuration</string>
+			<string>settings_group_basic</string>
 		</dict>
 		<dict>
 			<key>Type</key>
 			<string>PSMultiValueSpecifier</string>
 			<key>Title</key>
-			<string>Stream Resolution</string>
+			<string>settings_stream_resolution</string>
 			<key>Key</key>
 			<string>streamResolution</string>
 			<key>DefaultValue</key>
@@ -40,7 +40,7 @@
 			<key>Type</key>
 			<string>PSMultiValueSpecifier</string>
 			<key>Title</key>
-			<string>Frame Rate</string>
+			<string>settings_framerate</string>
 			<key>Key</key>
 			<string>framerate</string>
 			<key>DefaultValue</key>
@@ -53,16 +53,16 @@
 			</array>
 			<key>Titles</key>
 			<array>
-				<string>30 FPS</string>
-				<string>60 FPS</string>
-				<string>120 FPS</string>
+				<string>settings_fps_30</string>
+				<string>settings_fps_60</string>
+				<string>settings_fps_120</string>
 			</array>
 		</dict>
 		<dict>
 			<key>Type</key>
 			<string>PSMultiValueSpecifier</string>
 			<key>Title</key>
-			<string>Bitrate</string>
+			<string>settings_bitrate</string>
 			<key>Key</key>
 			<string>bitrate</string>
 			<key>DefaultValue</key>
@@ -104,16 +104,16 @@
 			<key>Type</key>
 			<string>PSMultiValueSpecifier</string>
 			<key>Title</key>
-			<string>Audio Configuration</string>
+			<string>settings_audio_config</string>
 			<key>Key</key>
 			<string>audioConfig</string>
 			<key>DefaultValue</key>
 			<string>2</string>
 			<key>Titles</key>
 			<array>
-				<string>Stereo</string>
-				<string>LPCM 5.1</string>
-				<string>LPCM 7.1</string>
+				<string>settings_audio_stereo</string>
+				<string>settings_audio_lpcm_51</string>
+				<string>settings_audio_lpcm_71</string>
 			</array>
 			<key>Values</key>
 			<array>
@@ -126,7 +126,7 @@
 			<key>Type</key>
 			<string>PSGroupSpecifier</string>
 			<key>Title</key>
-			<string>Host Options</string>
+			<string>settings_group_host</string>
 		</dict>
 		<dict>
 			<key>Type</key>
@@ -134,7 +134,7 @@
 			<key>DefaultValue</key>
 			<false/>
 			<key>Title</key>
-			<string>Play Audio on Host PC</string>
+			<string>settings_audio_on_pc</string>
 			<key>Key</key>
 			<string>audioOnPC</string>
 		</dict>
@@ -142,7 +142,7 @@
 			<key>Type</key>
 			<string>PSToggleSwitchSpecifier</string>
 			<key>Title</key>
-			<string>Optimize Game Settings</string>
+			<string>settings_optimize_games</string>
 			<key>Key</key>
 			<string>optimizeGames</string>
 			<key>DefaultValue</key>
@@ -152,13 +152,13 @@
 			<key>Type</key>
 			<string>PSGroupSpecifier</string>
 			<key>Title</key>
-			<string>Input Options</string>
+			<string>settings_group_input</string>
 		</dict>
 		<dict>
 			<key>Type</key>
 			<string>PSToggleSwitchSpecifier</string>
 			<key>Title</key>
-			<string>Automatic Game Controller Detection</string>
+			<string>settings_multi_controllers</string>
 			<key>Key</key>
 			<string>multipleControllers</string>
 			<key>DefaultValue</key>
@@ -168,7 +168,7 @@
 			<key>Type</key>
 			<string>PSToggleSwitchSpecifier</string>
 			<key>Title</key>
-			<string>Swap A/B and X/Y Buttons</string>
+			<string>settings_swap_abxy</string>
 			<key>Key</key>
 			<string>swapABXYButtons</string>
 			<key>DefaultValue</key>
@@ -178,7 +178,7 @@
 			<key>Type</key>
 			<string>PSToggleSwitchSpecifier</string>
 			<key>Title</key>
-			<string>Citrix X1 Mouse Support</string>
+			<string>settings_bt_mouse</string>
 			<key>Key</key>
 			<string>btMouseSupport</string>
 			<key>DefaultValue</key>
@@ -188,13 +188,13 @@
 			<key>Type</key>
 			<string>PSGroupSpecifier</string>
 			<key>Title</key>
-			<string>Video Options</string>
+			<string>settings_group_video</string>
 		</dict>
 		<dict>
 			<key>Type</key>
 			<string>PSMultiValueSpecifier</string>
 			<key>Title</key>
-			<string>Preferred Codec</string>
+			<string>settings_preferred_codec</string>
 			<key>Key</key>
 			<string>preferredCodec</string>
 			<key>DefaultValue</key>
@@ -207,16 +207,16 @@
 			</array>
 			<key>Titles</key>
 			<array>
-				<string>Auto</string>
-				<string>H.264</string>
-				<string>HEVC</string>
+				<string>settings_codec_auto</string>
+				<string>settings_codec_h264</string>
+				<string>settings_codec_hevc</string>
 			</array>
 		</dict>
 		<dict>
 			<key>Type</key>
 			<string>PSToggleSwitchSpecifier</string>
 			<key>Title</key>
-			<string>Full Range Video (Experimental)</string>
+			<string>settings_full_range_video</string>
 			<key>Key</key>
 			<string>fullRangeVideo</string>
 			<key>DefaultValue</key>
@@ -226,7 +226,7 @@
 			<key>Type</key>
 			<string>PSMultiValueSpecifier</string>
 			<key>Title</key>
-			<string>Frame Pacing Preference</string>
+			<string>settings_frame_pacing</string>
 			<key>Key</key>
 			<string>useFramePacing</string>
 			<key>DefaultValue</key>
@@ -238,15 +238,15 @@
 			</array>
 			<key>Titles</key>
 			<array>
-				<string>Lowest Latency</string>
-				<string>Smoothest Video</string>
+				<string>settings_frame_pacing_low_latency</string>
+				<string>settings_frame_pacing_smoothest</string>
 			</array>
 		</dict>
 		<dict>
 			<key>Type</key>
 			<string>PSToggleSwitchSpecifier</string>
 			<key>Title</key>
-			<string>Request HDR Video</string>
+			<string>settings_request_hdr</string>
 			<key>Key</key>
 			<string>enableHdr</string>
 			<key>DefaultValue</key>
@@ -256,13 +256,13 @@
 			<key>Type</key>
 			<string>PSGroupSpecifier</string>
 			<key>Title</key>
-			<string>Troubleshooting</string>
+			<string>settings_group_troubleshooting</string>
 		</dict>
 		<dict>
 			<key>Type</key>
 			<string>PSToggleSwitchSpecifier</string>
 			<key>Title</key>
-			<string>Statistics Overlay</string>
+			<string>settings_stats_overlay</string>
 			<key>Key</key>
 			<string>statsOverlay</string>
 			<key>DefaultValue</key>

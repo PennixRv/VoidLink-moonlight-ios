@@ -12,6 +12,7 @@
 #import "StreamManager.h"
 #import "ControllerSupport.h"
 #import "DataManager.h"
+#import "VLTVOSUI.h"
 
 #include <sys/socket.h>
 #include <netinet/in.h>
@@ -87,7 +88,8 @@
     
     _stageLabel = [[UILabel alloc] init];
     [_stageLabel setUserInteractionEnabled:NO];
-    [_stageLabel setText:[NSString stringWithFormat:@"Starting %@...", self.streamConfig.appName]];
+    NSString* startingFmt = VLTVOS_STR(@"Starting %@...", @"正在启动 %@...");
+    [_stageLabel setText:[NSString stringWithFormat:startingFmt, self.streamConfig.appName]];
     [_stageLabel sizeToFit];
     _stageLabel.textAlignment = NSTextAlignmentCenter;
     _stageLabel.textColor = [UIColor whiteColor];
@@ -141,7 +143,8 @@
     [_tipLabel setUserInteractionEnabled:NO];
     
 #if TARGET_OS_TV
-    [_tipLabel setText:@"Tip: Tap the Play/Pause button on the Apple TV Remote to disconnect from your PC"];
+    [_tipLabel setText:VLTVOS_STR(@"Tip: Tap the Play/Pause button on the Apple TV Remote to disconnect from your PC",
+                                 @"提示：按下 Apple TV 遥控器的 播放/暂停 键即可断开连接")];
 #else
     [_tipLabel setText:@"Tip: Swipe from the left edge to disconnect from your PC"];
 #endif
@@ -403,8 +406,9 @@
         NSString* message;
         
         if (portTestResults != ML_TEST_RESULT_INCONCLUSIVE && portTestResults != 0) {
-            title = @"Connection Error";
-            message = @"Your device's network connection is blocking Moonlight. Streaming may not work while connected to this network.";
+            title = VLTVOS_STR(@"Connection Error", @"连接错误");
+            message = VLTVOS_STR(@"Your device's network connection is blocking Moonlight. Streaming may not work while connected to this network.",
+                                 @"当前网络看起来阻止了 Moonlight。在此网络下可能无法正常串流。");
         }
         else {
             switch (errorCode) {
@@ -413,29 +417,34 @@
                     return;
                     
                 case ML_ERROR_NO_VIDEO_TRAFFIC:
-                    title = @"Connection Error";
-                    message = @"No video received from host.";
+                    title = VLTVOS_STR(@"Connection Error", @"连接错误");
+                    message = VLTVOS_STR(@"No video received from host.", @"没有收到来自主机的视频数据。");
                     if (portFlags != 0) {
                         char failingPorts[256];
                         LiStringifyPortFlags(portFlags, "\n", failingPorts, sizeof(failingPorts));
-                        message = [message stringByAppendingString:[NSString stringWithFormat:@"\n\nCheck your firewall and port forwarding rules for port(s):\n%s", failingPorts]];
+                        NSString* fmt = VLTVOS_STR(@"\n\nCheck your firewall and port forwarding rules for port(s):\n%s",
+                                                   @"\n\n请检查防火墙与端口转发设置，以下端口可能被阻止：\n%s");
+                        message = [message stringByAppendingString:[NSString stringWithFormat:fmt, failingPorts]];
                     }
                     break;
                     
                 case ML_ERROR_NO_VIDEO_FRAME:
-                    title = @"Connection Error";
-                    message = @"Your network connection isn't performing well. Reduce your video bitrate setting or try a faster connection.";
+                    title = VLTVOS_STR(@"Connection Error", @"连接错误");
+                    message = VLTVOS_STR(@"Your network connection isn't performing well. Reduce your video bitrate setting or try a faster connection.",
+                                         @"网络连接质量不佳。\n\n请降低视频码率，或使用更快更稳定的网络。");
                     break;
                     
                 case ML_ERROR_UNEXPECTED_EARLY_TERMINATION:
                 case ML_ERROR_PROTECTED_CONTENT:
-                    title = @"Connection Error";
-                    message = @"Something went wrong on your host PC when starting the stream.\n\nMake sure you don't have any DRM-protected content open on your host PC. You can also try restarting your host PC.\n\nIf the issue persists, try reinstalling your GPU drivers and GeForce Experience.";
+                    title = VLTVOS_STR(@"Connection Error", @"连接错误");
+                    message = VLTVOS_STR(@"Something went wrong on your host PC when starting the stream.\n\nMake sure you don't have any DRM-protected content open on your host PC. You can also try restarting your host PC.\n\nIf the issue persists, try reinstalling your GPU drivers and GeForce Experience.",
+                                         @"主机在启动串流时出现错误。\n\n请确认主机上没有打开 DRM 受保护的内容。\n你也可以尝试重启主机。\n\n如果问题仍然存在，请尝试重装显卡驱动与 GeForce Experience。");
                     break;
                     
                 case ML_ERROR_FRAME_CONVERSION:
-                    title = @"Connection Error";
-                    message = @"The host PC reported a fatal video encoding error.\n\nTry disabling HDR mode, changing the streaming resolution, or changing your host PC's display resolution.";
+                    title = VLTVOS_STR(@"Connection Error", @"连接错误");
+                    message = VLTVOS_STR(@"The host PC reported a fatal video encoding error.\n\nTry disabling HDR mode, changing the streaming resolution, or changing your host PC's display resolution.",
+                                         @"主机报告了严重的视频编码错误。\n\n请尝试关闭 HDR、调整串流分辨率，或修改主机显示器分辨率。");
                     break;
                     
                 default:
@@ -450,8 +459,9 @@
                         errorString = [NSString stringWithFormat:@"%d", errorCode];
                     }
                     
-                    title = @"Connection Terminated";
-                    message = [NSString stringWithFormat: @"The connection was terminated\n\nError code: %@", errorString];
+                    title = VLTVOS_STR(@"Connection Terminated", @"连接已终止");
+                    NSString* fmt = VLTVOS_STR(@"The connection was terminated\n\nError code: %@", @"连接已终止\n\n错误码：%@");
+                    message = [NSString stringWithFormat:fmt, errorString];
                     break;
                 }
             }
@@ -461,7 +471,7 @@
                                                                               message:message
                                                                        preferredStyle:UIAlertControllerStyleAlert];
         [Utils addHelpOptionToDialog:conTermAlert];
-        [conTermAlert addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleDefault handler:^(UIAlertAction* action){
+        [conTermAlert addAction:[UIAlertAction actionWithTitle:VLTVOS_STR(@"OK", @"确定") style:UIAlertActionStyleDefault handler:^(UIAlertAction* action){
             [self returnToMainFrame];
         }]];
         [self presentViewController:conTermAlert animated:YES completion:nil];
@@ -473,9 +483,19 @@
 - (void) stageStarting:(const char*)stageName {
     Log(LOG_I, @"Starting %s", stageName);
     dispatch_async(dispatch_get_main_queue(), ^{
-        NSString* lowerCase = [NSString stringWithFormat:@"%s in progress...", stageName];
-        NSString* titleCase = [[[lowerCase substringToIndex:1] uppercaseString] stringByAppendingString:[lowerCase substringFromIndex:1]];
-        [self->_stageLabel setText:titleCase];
+        NSString* stage = [NSString stringWithFormat:@"%s", stageName];
+#if TARGET_OS_TV
+        if (VLTVOSIsZhHans()) {
+            NSString* fmt = @"正在进行 %@...";
+            [self->_stageLabel setText:[NSString stringWithFormat:fmt, stage]];
+        }
+        else
+#endif
+        {
+            NSString* lowerCase = [NSString stringWithFormat:@"%s in progress...", stageName];
+            NSString* titleCase = [[[lowerCase substringToIndex:1] uppercaseString] stringByAppendingString:[lowerCase substringFromIndex:1]];
+            [self->_stageLabel setText:titleCase];
+        }
         [self->_stageLabel sizeToFit];
         self->_stageLabel.center = CGPointMake(self.view.frame.size.width / 2, self->_stageLabel.center.y);
     });
@@ -493,21 +513,33 @@
         // Allow the display to go to sleep now
         [UIApplication sharedApplication].idleTimerDisabled = NO;
         
-        NSString* message = [NSString stringWithFormat:@"%s failed with error %d", stageName, errorCode];
+        NSString* message;
+#if TARGET_OS_TV
+        if (VLTVOSIsZhHans()) {
+            message = [NSString stringWithFormat:@"阶段 %s 失败（错误 %d）", stageName, errorCode];
+        }
+        else
+#endif
+        {
+            message = [NSString stringWithFormat:@"%s failed with error %d", stageName, errorCode];
+        }
         if (portTestFlags != 0) {
             char failingPorts[256];
             LiStringifyPortFlags(portTestFlags, "\n", failingPorts, sizeof(failingPorts));
-            message = [message stringByAppendingString:[NSString stringWithFormat:@"\n\nCheck your firewall and port forwarding rules for port(s):\n%s", failingPorts]];
+            NSString* fmt = VLTVOS_STR(@"\n\nCheck your firewall and port forwarding rules for port(s):\n%s",
+                                       @"\n\n请检查防火墙与端口转发设置，以下端口可能被阻止：\n%s");
+            message = [message stringByAppendingString:[NSString stringWithFormat:fmt, failingPorts]];
         }
         if (portTestResults != ML_TEST_RESULT_INCONCLUSIVE && portTestResults != 0) {
-            message = [message stringByAppendingString:@"\n\nYour device's network connection is blocking Moonlight. Streaming may not work while connected to this network."];
+            message = [message stringByAppendingString:VLTVOS_STR(@"\n\nYour device's network connection is blocking Moonlight. Streaming may not work while connected to this network.",
+                                                                 @"\n\n当前网络看起来阻止了 Moonlight。在此网络下可能无法正常串流。")];
         }
         
-        UIAlertController* alert = [UIAlertController alertControllerWithTitle:@"Connection Failed"
+        UIAlertController* alert = [UIAlertController alertControllerWithTitle:VLTVOS_STR(@"Connection Failed", @"连接失败")
                                                                        message:message
                                                                 preferredStyle:UIAlertControllerStyleAlert];
         [Utils addHelpOptionToDialog:alert];
-        [alert addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleDefault handler:^(UIAlertAction* action){
+        [alert addAction:[UIAlertAction actionWithTitle:VLTVOS_STR(@"OK", @"确定") style:UIAlertActionStyleDefault handler:^(UIAlertAction* action){
             [self returnToMainFrame];
         }]];
         [self presentViewController:alert animated:YES completion:nil];
@@ -523,11 +555,11 @@
         // Allow the display to go to sleep now
         [UIApplication sharedApplication].idleTimerDisabled = NO;
         
-        UIAlertController* alert = [UIAlertController alertControllerWithTitle:@"Connection Error"
+        UIAlertController* alert = [UIAlertController alertControllerWithTitle:VLTVOS_STR(@"Connection Error", @"连接错误")
                                                                        message:message
                                                                 preferredStyle:UIAlertControllerStyleAlert];
         [Utils addHelpOptionToDialog:alert];
-        [alert addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleDefault handler:^(UIAlertAction* action){
+        [alert addAction:[UIAlertAction actionWithTitle:VLTVOS_STR(@"OK", @"确定") style:UIAlertActionStyleDefault handler:^(UIAlertAction* action){
             [self returnToMainFrame];
         }]];
         [self presentViewController:alert animated:YES completion:nil];
@@ -574,10 +606,10 @@
                 
             case CONN_STATUS_POOR:
                 if (self->_streamConfig.bitRate > 5000) {
-                    [self updateOverlayText:@"Slow connection to PC\nReduce your bitrate"];
+                    [self updateOverlayText:VLTVOS_STR(@"Slow connection to PC\nReduce your bitrate", @"与主机连接较慢\n建议降低码率")];
                 }
                 else {
-                    [self updateOverlayText:@"Poor connection to PC"];
+                    [self updateOverlayText:VLTVOS_STR(@"Poor connection to PC", @"与主机连接较差")];
                 }
                 break;
         }

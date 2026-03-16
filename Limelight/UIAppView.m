@@ -9,11 +9,126 @@
 #import "UIAppView.h"
 #import "AppAssetManager.h"
 
+#if TARGET_OS_TV
+#import "VLTVOSUI.h"
+#endif
+
 static const float REFRESH_CYCLE = 1.0f;
+
+#if TARGET_OS_TV
+@interface VLMarqueeLabel : UIView
+@property (nonatomic, copy) NSString* text;
+@property (nonatomic, strong) UIFont* font;
+@property (nonatomic, strong) UIColor* textColor;
+- (void)startIfNeeded;
+- (void)stop;
+@end
+
+@implementation VLMarqueeLabel {
+    UILabel* _label;
+    BOOL _animating;
+    CGFloat _lastOverflow;
+}
+
+- (instancetype)initWithFrame:(CGRect)frame {
+    self = [super initWithFrame:frame];
+    if (self) {
+        self.clipsToBounds = YES;
+
+        _label = [[UILabel alloc] initWithFrame:self.bounds];
+        _label.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+        _label.numberOfLines = 1;
+        _label.lineBreakMode = NSLineBreakByClipping;
+        _label.textAlignment = NSTextAlignmentLeft;
+        [self addSubview:_label];
+    }
+    return self;
+}
+
+- (NSString *)text { return _label.text; }
+- (void)setText:(NSString *)text { _label.text = text; }
+- (UIFont *)font { return _label.font; }
+- (void)setFont:(UIFont *)font { _label.font = font; }
+- (UIColor *)textColor { return _label.textColor; }
+- (void)setTextColor:(UIColor *)textColor { _label.textColor = textColor; }
+
+- (void)layoutSubviews {
+    [super layoutSubviews];
+
+    // If our size changed while animating, restart cleanly to avoid odd offsets.
+    if (_animating) {
+        [self startIfNeeded];
+    }
+}
+
+- (void)startIfNeeded {
+    [self stop];
+
+    if (self.bounds.size.width <= 1.0) {
+        return;
+    }
+
+    // Measure single-line width.
+    CGSize fit = [_label sizeThatFits:CGSizeMake(CGFLOAT_MAX, self.bounds.size.height)];
+    CGFloat overflow = fit.width - self.bounds.size.width;
+    _lastOverflow = overflow;
+    if (overflow <= 8.0) {
+        _label.frame = self.bounds;
+        _label.transform = CGAffineTransformIdentity;
+        return;
+    }
+
+    _animating = YES;
+    _label.frame = self.bounds;
+    _label.transform = CGAffineTransformIdentity;
+
+    // Scroll speed tuned for tvOS readability. Cap duration to avoid comically slow scroll.
+    CGFloat pixelsPerSecond = 55.0;
+    CGFloat duration = MAX(2.2, MIN(12.0, overflow / pixelsPerSecond));
+
+    __weak typeof(self) weakSelf = self;
+    void (^animateOnce)(void) = ^{
+        __strong typeof(self) strongSelf = weakSelf;
+        if (strongSelf == nil || !strongSelf->_animating) {
+            return;
+        }
+        [UIView animateWithDuration:duration
+                              delay:0.75
+                            options:UIViewAnimationOptionCurveLinear
+                         animations:^{
+            strongSelf->_label.transform = CGAffineTransformMakeTranslation(-overflow, 0);
+        } completion:^(BOOL finished) {
+            __strong typeof(self) strongSelf2 = weakSelf;
+            if (strongSelf2 == nil || !finished || !strongSelf2->_animating) {
+                return;
+            }
+            // Reset and loop with a small pause for readability.
+            strongSelf2->_label.transform = CGAffineTransformIdentity;
+            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.65 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+                animateOnce();
+            });
+        }];
+    };
+
+    animateOnce();
+}
+
+- (void)stop {
+    _animating = NO;
+    [_label.layer removeAllAnimations];
+    [_label removeAllAnimations];
+    _label.transform = CGAffineTransformIdentity;
+    _label.frame = self.bounds;
+}
+
+@end
+#endif
 
 @implementation UIAppView {
     TemporaryApp* _app;
+ #if !TARGET_OS_TV
     UILabel* _appLabel;
+ #endif
     UIImageView* _appOverlay;
     UIImageView* _appImage;
     NSCache* _artCache;
@@ -21,6 +136,9 @@ static const float REFRESH_CYCLE = 1.0f;
 #if TARGET_OS_TV
     UIInterpolatingMotionEffect* _motionEffectH;
     UIInterpolatingMotionEffect* _motionEffectV;
+    UIView* _titleOverlayContainer;
+    CAGradientLayer* _titleGradientLayer;
+    VLMarqueeLabel* _titleLabel;
 #endif
 }
 
@@ -39,14 +157,17 @@ static UIImage* noImage;
     }
         
 #if TARGET_OS_TV
-    self.frame = CGRectMake(0, 0, 200, 265);
+    // Match the tvOS storyboard cell size (Main.storyboard: AppCell itemSize=300x400)
+    // so we don't need to scale the whole view (which makes fonts and corner radii harder to tune).
+    self.frame = CGRectMake(0, 0, 300, 400);
 #else
     self.frame = CGRectMake(0, 0, 150, 200);
 #endif
     
     [self setAlpha:app.hidden ? 0.4 : 1.0];
 
-    _appImage = [[UIImageView alloc] initWithFrame:self.frame];
+    _appImage = [[UIImageView alloc] initWithFrame:self.bounds];
+    _appImage.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
     _appImage.contentMode = UIViewContentModeScaleAspectFill;
     [_appImage setImage:noImage];
     [self addSubview:_appImage];
@@ -72,10 +193,8 @@ static UIImage* noImage;
     
 #if TARGET_OS_TV
     _appImage.adjustsImageWhenAncestorFocused = YES;
-    _appImage.layer.cornerRadius = 16.0;
-    if (@available(tvOS 13.0, *)) {
-        _appImage.layer.cornerCurve = kCACornerCurveContinuous;
-    }
+    _appImage.layer.cornerRadius = VLTVOSCardCornerRadius;
+    VLTVOSSetContinuousCornerIfAvailable(_appImage.layer);
     _appImage.clipsToBounds = YES;
     
     self.layer.shadowColor = [[UIColor blackColor] CGColor];
@@ -84,12 +203,36 @@ static UIImage* noImage;
     self.layer.shadowRadius = 18.0;
     self.clipsToBounds = NO;
     
-    _motionEffectH = [[UIInterpolatingMotionEffect alloc] initWithKeyPath:@"center.x" type:UIInterpolatingMotionEffectTypeTiltAlongHorizontalAxis];
-    _motionEffectH.minimumRelativeValue = @(-8);
-    _motionEffectH.maximumRelativeValue = @(8);
-    _motionEffectV = [[UIInterpolatingMotionEffect alloc] initWithKeyPath:@"center.y" type:UIInterpolatingMotionEffectTypeTiltAlongVerticalAxis];
-    _motionEffectV.minimumRelativeValue = @(-8);
-    _motionEffectV.maximumRelativeValue = @(8);
+    _motionEffectH = VLTVOSCreateMotionEffect(@"center.x", UIInterpolatingMotionEffectTypeTiltAlongHorizontalAxis);
+    _motionEffectV = VLTVOSCreateMotionEffect(@"center.y", UIInterpolatingMotionEffectTypeTiltAlongVerticalAxis);
+
+    // Bottom title overlay (gradient + marquee on focus), inspired by modern tvOS clients.
+    _titleOverlayContainer = [[UIView alloc] initWithFrame:CGRectZero];
+    _titleOverlayContainer.userInteractionEnabled = NO;
+    _titleOverlayContainer.clipsToBounds = YES;
+    _titleOverlayContainer.layer.cornerRadius = VLTVOSCardCornerRadius;
+    VLTVOSSetContinuousCornerIfAvailable(_titleOverlayContainer.layer);
+    if (@available(tvOS 11.0, *)) {
+        _titleOverlayContainer.layer.maskedCorners = kCALayerMinXMaxYCorner | kCALayerMaxXMaxYCorner;
+    }
+
+    _titleGradientLayer = [CAGradientLayer layer];
+    _titleGradientLayer.startPoint = CGPointMake(0.5, 0.0);
+    _titleGradientLayer.endPoint = CGPointMake(0.5, 1.0);
+    _titleGradientLayer.locations = @[ @0.0, @1.0 ];
+    _titleGradientLayer.colors = @[
+        (__bridge id)[UIColor colorWithWhite:0.0 alpha:0.0].CGColor,
+        (__bridge id)[UIColor colorWithWhite:0.0 alpha:0.68].CGColor,
+    ];
+    [_titleOverlayContainer.layer insertSublayer:_titleGradientLayer atIndex:0];
+
+    _titleLabel = [[VLMarqueeLabel alloc] initWithFrame:CGRectZero];
+    _titleLabel.userInteractionEnabled = NO;
+    _titleLabel.font = [UIFont systemFontOfSize:30 weight:UIFontWeightSemibold];
+    _titleLabel.textColor = [UIColor whiteColor];
+    [_titleOverlayContainer addSubview:_titleLabel];
+
+    [_appImage.overlayContentView addSubview:_titleOverlayContainer];
 #else
     // Rasterizing the cell layer increases rendering performance by quite a bit
     // but we want it unrasterized for tvOS where it must be scaled.
@@ -118,32 +261,38 @@ static UIImage* noImage;
     }
     
     BOOL focused = nextIsSelf;
-    CGFloat targetScale = focused ? 1.1 : 1.0;
-    CGFloat scaleDiff = (self.bounds.size.height * targetScale - self.bounds.size.height) / 2.0;
-    CGAffineTransform targetTransform = focused ? CGAffineTransformTranslate(CGAffineTransformMakeScale(targetScale, targetScale), 0, -scaleDiff) : CGAffineTransformIdentity;
+    CGAffineTransform targetTransform = VLTVOSFocusTransformForBounds(self.bounds, focused);
     
     [coordinator addCoordinatedAnimations:^{
         self.transform = targetTransform;
-        self.layer.shadowOffset = focused ? CGSizeMake(0, 16) : CGSizeMake(0, 0);
+        self.layer.shadowOffset = focused ? CGSizeMake(0, VLTVOSCardShadowOffsetYFocused) : CGSizeMake(0, 0);
         self.layer.shadowOpacity = focused ? 0.20 : 0.0;
-        self.layer.shadowRadius = 18.0;
+        self.layer.shadowRadius = VLTVOSCardShadowRadiusFocused;
     } completion:nil];
-    
-    if (focused) {
-        if (_motionEffectH != nil) {
-            [self addMotionEffect:_motionEffectH];
+
+    VLTVOSUpdateMotionEffectsForFocus(self, _motionEffectH, _motionEffectV, focused);
+
+    // Marquee only when focused to keep the screen calm.
+    if (_titleLabel != nil) {
+        if (focused) {
+            [_titleLabel startIfNeeded];
         }
-        if (_motionEffectV != nil) {
-            [self addMotionEffect:_motionEffectV];
+        else {
+            [_titleLabel stop];
         }
     }
+}
+
+- (void)tvosSetAncestorFocused:(BOOL)focused
+{
+    if (_titleLabel == nil) {
+        return;
+    }
+    if (focused) {
+        [_titleLabel startIfNeeded];
+    }
     else {
-        if (_motionEffectH != nil) {
-            [self removeMotionEffect:_motionEffectH];
-        }
-        if (_motionEffectV != nil) {
-            [self removeMotionEffect:_motionEffectV];
-        }
+        [_titleLabel stop];
     }
 }
 #endif
@@ -183,11 +332,12 @@ static UIImage* noImage;
         [_appOverlay removeFromSuperview];
         _appOverlay = nil;
     }
+#if !TARGET_OS_TV
     if (_appLabel != nil) {
         [_appLabel removeFromSuperview];
         _appLabel = nil;
     }
-    
+#endif
     BOOL noAppImage = false;
     
     // First check the memory cache
@@ -223,25 +373,32 @@ static UIImage* noImage;
         _appOverlay.contentMode = UIViewContentModeScaleAspectFit;
     }
     
+    // Always show the title overlay for fast scanning on tvOS.
+#if TARGET_OS_TV
+    if (_titleLabel != nil) {
+        _titleLabel.text = _app.name ?: @"";
+        // If we're already focused, restart the marquee in case the title changed.
+        if (self.isFocused) {
+            [_titleLabel startIfNeeded];
+        }
+    }
+#else
+    // Keep the old fallback label behavior on iOS where the UI layout differs.
     if (noAppImage) {
         _appLabel = [[UILabel alloc] init];
         [_appLabel setTextColor:[UIColor whiteColor]];
         [_appLabel setText:_app.name];
-#if TARGET_OS_TV
-        [_appLabel setFont:[UIFont systemFontOfSize:28 weight:UIFontWeightMedium]];
-#else
         [_appLabel setFont:[UIFont systemFontOfSize:24]];
-#endif
         [_appLabel setBaselineAdjustment:UIBaselineAdjustmentAlignCenters];
         [_appLabel setTextAlignment:NSTextAlignmentCenter];
         [_appLabel setLineBreakMode:NSLineBreakByWordWrapping];
         [_appLabel setNumberOfLines:0];
     }
-    
+#endif
+
     [self positionSubviews];
     
 #if TARGET_OS_TV
-    [_appImage.overlayContentView addSubview:_appLabel];
     [_appImage.overlayContentView addSubview:_appOverlay];
 #else
     [self addSubview:_appLabel];
@@ -260,7 +417,8 @@ static UIImage* noImage;
     CGFloat padding = 5.f;
     CGSize frameSize = _appImage.frame.size;
     CGPoint center = _appImage.center;
-    
+
+#if !TARGET_OS_TV
     if (_appLabel != nil) {
         if (_appOverlay != nil) {
             _appOverlay.frame = CGRectMake(0, 0, frameSize.width / 3, frameSize.width / 3);
@@ -276,6 +434,37 @@ static UIImage* noImage;
         _appOverlay.frame = CGRectMake(0, 0, frameSize.width / 2, frameSize.width / 2);
         _appOverlay.center = center;
     }
+    return;
+#endif
+
+    if (_appOverlay != nil) {
+        // Small corner overlay looks cleaner than a giant centered play icon.
+        CGFloat overlaySize = MIN(frameSize.width, frameSize.height) * 0.22;
+        CGFloat inset = 14.0;
+        _appOverlay.frame = CGRectMake(frameSize.width - overlaySize - inset,
+                                       inset,
+                                       overlaySize,
+                                       overlaySize);
+    }
+
+#if TARGET_OS_TV
+    if (_titleOverlayContainer != nil && _titleGradientLayer != nil && _titleLabel != nil) {
+        CGFloat overlayHeight = 96.0;
+        _titleOverlayContainer.frame = CGRectMake(0,
+                                                  frameSize.height - overlayHeight,
+                                                  frameSize.width,
+                                                  overlayHeight);
+        _titleGradientLayer.frame = _titleOverlayContainer.bounds;
+
+        // Insets tuned to keep Chinese readable without covering too much box art.
+        CGFloat insetX = 18.0;
+        CGFloat insetY = 12.0;
+        _titleLabel.frame = CGRectMake(insetX,
+                                       insetY,
+                                       _titleOverlayContainer.bounds.size.width - insetX * 2,
+                                       _titleOverlayContainer.bounds.size.height - insetY * 2);
+    }
+#endif
 }
 
 - (void) updateLoop {
@@ -289,11 +478,6 @@ static UIImage* noImage;
         (_appOverlay == nil && [_app.id isEqualToString:_app.host.currentGame])) {
         [self updateAppImage];
     }
-    
-    // Show no shadow for hidden apps. Because we adjust the opacity of the
-    // cells for hidden apps, it makes them look bad when the shadow draws
-    // through the app tile.
-    self.superview.layer.shadowOpacity = _app.hidden ? 0.0f : 0.5f;
     
     // Update opacity if neccessary
     [self setAlpha:_app.hidden ? 0.4 : 1.0];

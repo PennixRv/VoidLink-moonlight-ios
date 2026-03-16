@@ -1,0 +1,37 @@
+/* Settings.bundle localized strings (zh-Hans) */
+
+"settings_group_basic" = "基础配置";
+"settings_stream_resolution" = "串流分辨率";
+"settings_framerate" = "帧率";
+"settings_fps_30" = "30 帧";
+"settings_fps_60" = "60 帧";
+"settings_fps_120" = "120 帧";
+"settings_bitrate" = "码率";
+"settings_audio_config" = "音频配置";
+"settings_audio_stereo" = "立体声";
+"settings_audio_lpcm_51" = "LPCM 5.1";
+"settings_audio_lpcm_71" = "LPCM 7.1";
+
+"settings_group_host" = "主机选项";
+"settings_audio_on_pc" = "主机端播放音频";
+"settings_optimize_games" = "优化游戏设置";
+
+"settings_group_input" = "输入选项";
+"settings_multi_controllers" = "自动识别手柄";
+"settings_swap_abxy" = "交换 A/B 与 X/Y";
+"settings_bt_mouse" = "Citrix X1 鼠标支持";
+
+"settings_group_video" = "视频选项";
+"settings_preferred_codec" = "首选编码";
+"settings_codec_auto" = "自动";
+"settings_codec_h264" = "H.264";
+"settings_codec_hevc" = "HEVC";
+"settings_full_range_video" = "全范围视频（实验）";
+"settings_frame_pacing" = "帧时间策略";
+"settings_frame_pacing_low_latency" = "最低延迟";
+"settings_frame_pacing_smoothest" = "最平滑画面";
+"settings_request_hdr" = "请求 HDR";
+
+"settings_group_troubleshooting" = "故障排查";
+"settings_stats_overlay" = "统计信息叠加层";
+
