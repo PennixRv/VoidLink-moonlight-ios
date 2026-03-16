@@ -37,6 +37,66 @@ extern int ff_isom_write_av1c(AVIOContext *pb, const uint8_t *buf, int size,
     BOOL framePacing;
 }
 
+#if TARGET_OS_TV
+- (void)tvosFixupFormatDescriptionColorPropertiesIfNeeded
+{
+    if (formatDesc == NULL) {
+        return;
+    }
+    
+    // Match Moonlight Android behavior: default to LIMITED range, but allow users
+    // to override if their display chain expects FULL range.
+    BOOL wantsFullRange = [[NSUserDefaults standardUserDefaults] boolForKey:@"fullRangeVideo"];
+    
+    NSDictionary* oldExtensions = (__bridge NSDictionary*)CMFormatDescriptionGetExtensions(formatDesc);
+    if (oldExtensions == nil) {
+        return;
+    }
+    
+    NSMutableDictionary* newExtensions = [oldExtensions mutableCopy];
+    newExtensions[(__bridge NSString*)kCMFormatDescriptionExtension_FullRangeVideo] = @(wantsFullRange);
+    
+    // For SDR streams, ensure we have sane defaults for colorspace fields when absent.
+    // (Many decoders can infer these from VUI, but setting defaults helps avoid
+    // washed-out output on some tvOS/decoder combinations.)
+    if ((videoFormat & VIDEO_FORMAT_MASK_10BIT) == 0) {
+        if (newExtensions[(__bridge NSString*)kCMFormatDescriptionExtension_ColorPrimaries] == nil) {
+            newExtensions[(__bridge NSString*)kCMFormatDescriptionExtension_ColorPrimaries] =
+                (__bridge NSString*)kCMFormatDescriptionColorPrimaries_ITU_R_709_2;
+        }
+        if (newExtensions[(__bridge NSString*)kCMFormatDescriptionExtension_TransferFunction] == nil) {
+            newExtensions[(__bridge NSString*)kCMFormatDescriptionExtension_TransferFunction] =
+                (__bridge NSString*)kCMFormatDescriptionTransferFunction_ITU_R_709_2;
+        }
+        if (newExtensions[(__bridge NSString*)kCMFormatDescriptionExtension_YCbCrMatrix] == nil) {
+            newExtensions[(__bridge NSString*)kCMFormatDescriptionExtension_YCbCrMatrix] =
+                (__bridge NSString*)kCMFormatDescriptionYCbCrMatrix_ITU_R_709_2;
+        }
+    }
+    
+    CMVideoDimensions dims = CMVideoFormatDescriptionGetDimensions(formatDesc);
+    CMVideoCodecType codecType = CMFormatDescriptionGetMediaSubType(formatDesc);
+    
+    CMVideoFormatDescriptionRef newFormatDesc = NULL;
+    OSStatus status = CMVideoFormatDescriptionCreate(kCFAllocatorDefault,
+                                                     codecType,
+                                                     dims.width,
+                                                     dims.height,
+                                                     (__bridge CFDictionaryRef)newExtensions,
+                                                     &newFormatDesc);
+    if (status != noErr || newFormatDesc == NULL) {
+        Log(LOG_W, @"Failed to apply colorspace fixups to format description: %d", (int)status);
+        if (newFormatDesc != NULL) {
+            CFRelease(newFormatDesc);
+        }
+        return;
+    }
+    
+    CFRelease(formatDesc);
+    formatDesc = newFormatDesc;
+}
+#endif
+
 - (void)reinitializeDisplayLayer
 {
     CALayer *oldLayer = displayLayer;
@@ -454,6 +514,12 @@ int DrSubmitDecodeUnit(PDECODE_UNIT decodeUnit);
                 Log(LOG_E, @"Failed to create H264 format description: %d", (int)status);
                 formatDesc = NULL;
             }
+
+#if TARGET_OS_TV
+            if (formatDesc != NULL) {
+                [self tvosFixupFormatDescriptionColorPropertiesIfNeeded];
+            }
+#endif
             
             // Free parameter set buffers after submission
             [parameterSetBuffers removeAllObjects];
@@ -493,6 +559,12 @@ int DrSubmitDecodeUnit(PDECODE_UNIT decodeUnit);
                 Log(LOG_E, @"Failed to create HEVC format description: %d", (int)status);
                 formatDesc = NULL;
             }
+
+#if TARGET_OS_TV
+            if (formatDesc != NULL) {
+                [self tvosFixupFormatDescriptionColorPropertiesIfNeeded];
+            }
+#endif
             
             // Free parameter set buffers after submission
             [parameterSetBuffers removeAllObjects];
@@ -502,6 +574,11 @@ int DrSubmitDecodeUnit(PDECODE_UNIT decodeUnit);
             
             Log(LOG_I, @"Constructing new AV1 format description");
             formatDesc = [self createAV1FormatDescriptionForIDRFrame:fullFrameData];
+#if TARGET_OS_TV
+            if (formatDesc != NULL) {
+                [self tvosFixupFormatDescriptionColorPropertiesIfNeeded];
+            }
+#endif
         }
         else {
             // Unsupported codec!

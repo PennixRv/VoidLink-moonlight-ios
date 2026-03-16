@@ -182,13 +182,17 @@
 
 #if TARGET_OS_TV
     NSString* displayInfo;
+    NSString* rangeInfo = [[NSUserDefaults standardUserDefaults] boolForKey:@"fullRangeVideo"] ? @"Full" : @"Limited";
     if (@available(tvOS 10.3, *)) {
-        displayInfo = [NSString stringWithFormat:@"\nRequested FPS: %d (Display max: %ld)",
+        displayInfo = [NSString stringWithFormat:@"\nRequested FPS: %d (Display max: %ld)\nVideo range: %@",
                        _config.frameRate,
-                       (long)[UIScreen mainScreen].maximumFramesPerSecond];
+                       (long)[UIScreen mainScreen].maximumFramesPerSecond,
+                       rangeInfo];
     }
     else {
-        displayInfo = [NSString stringWithFormat:@"\nRequested FPS: %d", _config.frameRate];
+        displayInfo = [NSString stringWithFormat:@"\nRequested FPS: %d\nVideo range: %@",
+                       _config.frameRate,
+                       rangeInfo];
     }
 #else
     NSString* displayInfo = @"";
