@@ -11,12 +11,17 @@
 @implementation UIComputerView {
     TemporaryHost* _host;
     UIVisualEffectView* _cardBackground;
+    UIView* _selectedHighlightView;
     UIImageView* _hostIcon;
     UILabel* _hostLabel;
     UIImageView* _hostOverlay;
     UIActivityIndicatorView* _hostSpinner;
     id<HostCallback> _callback;
     CGSize _labelSize;
+#if TARGET_OS_TV
+    UIInterpolatingMotionEffect* _motionEffectH;
+    UIInterpolatingMotionEffect* _motionEffectV;
+#endif
 }
 static const float REFRESH_CYCLE = 2.0f;
 
@@ -41,25 +46,20 @@ static const int LABEL_DY = 20;
     }
 #endif
     
-    // tvOS-style "material" card behind the host icon. Keep this lightweight and
-    // focus-engine friendly by avoiding custom focus environments.
-#if TARGET_OS_TV
-    _cardBackground = [[UIVisualEffectView alloc] initWithEffect:[UIBlurEffect effectWithStyle:UIBlurEffectStyleDark]];
-    _cardBackground.frame = self.bounds;
-    _cardBackground.userInteractionEnabled = NO;
-    _cardBackground.alpha = 0.65;
-    _cardBackground.clipsToBounds = YES;
-    _cardBackground.layer.cornerRadius = 32;
-    [self addSubview:_cardBackground];
-#endif
-
     _hostIcon = [[UIImageView alloc] initWithFrame:self.frame];
+    _hostIcon.contentMode = UIViewContentModeScaleAspectFit;
+#if TARGET_OS_TV
+    // Use template rendering so we can invert tint colors on focus, similar to modern tvOS apps.
+    [_hostIcon setImage:[[UIImage imageNamed:@"Computer"] imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate]];
+    _hostIcon.tintColor = [UIColor whiteColor];
+#else
     [_hostIcon setImage:[UIImage imageNamed:@"Computer"]];
+#endif
     
     self.layer.shadowColor = [[UIColor blackColor] CGColor];
-    self.layer.shadowOffset = CGSizeMake(0, 18);
-    self.layer.shadowOpacity = 0.3;
-    self.layer.shadowRadius = 24.0;
+    self.layer.shadowOffset = CGSizeMake(0, 10);
+    self.layer.shadowOpacity = 0.0;
+    self.layer.shadowRadius = 16.0;
     self.clipsToBounds = NO;
 
     [self addTarget:self action:@selector(hostButtonSelected:) forControlEvents:UIControlEventTouchDown];
@@ -84,6 +84,35 @@ static const int LABEL_DY = 20;
     _hostSpinner.userInteractionEnabled = NO;
     _hostSpinner.hidesWhenStopped = YES;
 
+#if TARGET_OS_TV
+    // tvOS-style "material" card behind the host icon.
+    _cardBackground = [[UIVisualEffectView alloc] initWithEffect:[UIBlurEffect effectWithStyle:UIBlurEffectStyleDark]];
+    _cardBackground.frame = _hostIcon.frame;
+    _cardBackground.userInteractionEnabled = NO;
+    _cardBackground.alpha = 0.7;
+    _cardBackground.clipsToBounds = YES;
+    _cardBackground.layer.cornerRadius = 16.0;
+    if (@available(tvOS 13.0, *)) {
+        _cardBackground.layer.cornerCurve = kCACornerCurveContinuous;
+    }
+    
+    _selectedHighlightView = [[UIView alloc] initWithFrame:_cardBackground.bounds];
+    _selectedHighlightView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+    _selectedHighlightView.backgroundColor = [UIColor colorWithWhite:1.0 alpha:1.0];
+    _selectedHighlightView.hidden = YES;
+    [_cardBackground.contentView addSubview:_selectedHighlightView];
+    
+    _motionEffectH = [[UIInterpolatingMotionEffect alloc] initWithKeyPath:@"center.x" type:UIInterpolatingMotionEffectTypeTiltAlongHorizontalAxis];
+    _motionEffectH.minimumRelativeValue = @(-8);
+    _motionEffectH.maximumRelativeValue = @(8);
+    _motionEffectV = [[UIInterpolatingMotionEffect alloc] initWithKeyPath:@"center.y" type:UIInterpolatingMotionEffectTypeTiltAlongVerticalAxis];
+    _motionEffectV.minimumRelativeValue = @(-8);
+    _motionEffectV.maximumRelativeValue = @(8);
+#endif
+    
+#if TARGET_OS_TV
+    [self addSubview:_cardBackground];
+#endif
     [self addSubview:_hostLabel];
     [self addSubview:_hostIcon];
     
@@ -91,8 +120,6 @@ static const int LABEL_DY = 20;
     _hostIcon.clipsToBounds = NO;
     _hostIcon.adjustsImageWhenAncestorFocused = YES;
     _hostIcon.masksFocusEffectToContents = YES;
-    _hostIcon.layer.cornerRadius = 32.0;
-    _hostIcon.clipsToBounds = YES;
     
     self.adjustsImageWhenHighlighted = NO;
     
@@ -124,15 +151,49 @@ static const int LABEL_DY = 20;
         return;
     }
     
-    CGFloat targetScale = nextIsSelf ? 1.08 : 1.0;
-    CGFloat targetShadowOpacity = nextIsSelf ? 0.65 : 0.3;
-    CGFloat targetMaterialAlpha = nextIsSelf ? 0.85 : 0.65;
+    BOOL focused = nextIsSelf;
+    CGFloat targetScale = focused ? 1.1 : 1.0;
+    CGFloat scaleDiff = (self.bounds.size.height * targetScale - self.bounds.size.height) / 2.0;
+    CGAffineTransform targetTransform = focused ? CGAffineTransformTranslate(CGAffineTransformMakeScale(targetScale, targetScale), 0, -scaleDiff) : CGAffineTransformIdentity;
     
     [coordinator addCoordinatedAnimations:^{
-        self.transform = CGAffineTransformMakeScale(targetScale, targetScale);
-        self.layer.shadowOpacity = targetShadowOpacity;
-        self->_cardBackground.alpha = targetMaterialAlpha;
+        self.transform = targetTransform;
+        self.layer.shadowOffset = focused ? CGSizeMake(0, 16) : CGSizeMake(0, 0);
+        self.layer.shadowOpacity = focused ? 0.15 : 0.0;
+        self.layer.shadowRadius = focused ? 18.0 : 16.0;
+        self->_cardBackground.alpha = focused ? 0.9 : 0.7;
     } completion:nil];
+    
+    _selectedHighlightView.hidden = !focused;
+    
+    // Match Bilibili-style focus: white card when focused, dark card when not.
+    UIColor* focusedForeground = [UIColor blackColor];
+    UIColor* unfocusedForeground = [UIColor whiteColor];
+    if (@available(tvOS 13.0, *)) {
+        if (self.traitCollection.userInterfaceStyle == UIUserInterfaceStyleLight) {
+            unfocusedForeground = [UIColor blackColor];
+        }
+    }
+    _hostIcon.tintColor = focused ? focusedForeground : unfocusedForeground;
+    _hostOverlay.tintColor = focused ? focusedForeground : unfocusedForeground;
+    _hostLabel.textColor = focused ? focusedForeground : unfocusedForeground;
+    
+    if (focused) {
+        if (_motionEffectH != nil) {
+            [self addMotionEffect:_motionEffectH];
+        }
+        if (_motionEffectV != nil) {
+            [self addMotionEffect:_motionEffectV];
+        }
+    }
+    else {
+        if (_motionEffectH != nil) {
+            [self removeMotionEffect:_motionEffectH];
+        }
+        if (_motionEffectV != nil) {
+            [self removeMotionEffect:_motionEffectV];
+        }
+    }
 }
 #endif
 
@@ -219,6 +280,11 @@ static const int LABEL_DY = 20;
         LABEL_DY / 2;
     
     self.bounds = CGRectMake(x - ITEM_PADDING, y - ITEM_PADDING, width + 2 * ITEM_PADDING, height + 2 * ITEM_PADDING);
+    
+#if TARGET_OS_TV
+    // Keep the material card pinned to the icon region (not the label).
+    _cardBackground.frame = _hostIcon.frame;
+#endif
 }
 
 - (void) updateContentsForHost:(TemporaryHost*)host {
@@ -229,7 +295,11 @@ static const int LABEL_DY = 20;
         [_hostSpinner stopAnimating];
 
         if (host.pairState == PairStateUnpaired) {
-            [_hostOverlay setImage:[UIImage imageNamed:@"LockedOverlayIcon"]];
+            UIImage* img = [UIImage imageNamed:@"LockedOverlayIcon"];
+#if TARGET_OS_TV
+            img = [img imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
+#endif
+            [_hostOverlay setImage:img];
         }
         else {
             [_hostOverlay setImage:nil];
@@ -237,7 +307,11 @@ static const int LABEL_DY = 20;
     }
     else if (host.state == StateOffline) {
         [_hostSpinner stopAnimating];
-        [_hostOverlay setImage:[UIImage imageNamed:@"ErrorOverlayIcon"]];
+        UIImage* img = [UIImage imageNamed:@"ErrorOverlayIcon"];
+#if TARGET_OS_TV
+        img = [img imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
+#endif
+        [_hostOverlay setImage:img];
     }
     else {
         [_hostSpinner startAnimating];

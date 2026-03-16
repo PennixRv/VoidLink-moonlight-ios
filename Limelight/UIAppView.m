@@ -13,12 +13,15 @@ static const float REFRESH_CYCLE = 1.0f;
 
 @implementation UIAppView {
     TemporaryApp* _app;
-    UIVisualEffectView* _cardBackground;
     UILabel* _appLabel;
     UIImageView* _appOverlay;
     UIImageView* _appImage;
     NSCache* _artCache;
     id<AppCallback> _callback;
+#if TARGET_OS_TV
+    UIInterpolatingMotionEffect* _motionEffectH;
+    UIInterpolatingMotionEffect* _motionEffectV;
+#endif
 }
 
 static UIImage* noImage;
@@ -43,17 +46,8 @@ static UIImage* noImage;
     
     [self setAlpha:app.hidden ? 0.4 : 1.0];
 
-#if TARGET_OS_TV
-    _cardBackground = [[UIVisualEffectView alloc] initWithEffect:[UIBlurEffect effectWithStyle:UIBlurEffectStyleDark]];
-    _cardBackground.frame = self.bounds;
-    _cardBackground.userInteractionEnabled = NO;
-    _cardBackground.alpha = 0.55;
-    _cardBackground.clipsToBounds = YES;
-    _cardBackground.layer.cornerRadius = 24.0;
-    [self addSubview:_cardBackground];
-#endif
-    
     _appImage = [[UIImageView alloc] initWithFrame:self.frame];
+    _appImage.contentMode = UIViewContentModeScaleAspectFill;
     [_appImage setImage:noImage];
     [self addSubview:_appImage];
     
@@ -78,14 +72,24 @@ static UIImage* noImage;
     
 #if TARGET_OS_TV
     _appImage.adjustsImageWhenAncestorFocused = YES;
-    _appImage.layer.cornerRadius = 24.0;
+    _appImage.layer.cornerRadius = 16.0;
+    if (@available(tvOS 13.0, *)) {
+        _appImage.layer.cornerCurve = kCACornerCurveContinuous;
+    }
     _appImage.clipsToBounds = YES;
     
     self.layer.shadowColor = [[UIColor blackColor] CGColor];
-    self.layer.shadowOffset = CGSizeMake(0, 18);
-    self.layer.shadowOpacity = 0.25;
-    self.layer.shadowRadius = 24.0;
+    self.layer.shadowOffset = CGSizeMake(0, 0);
+    self.layer.shadowOpacity = 0.0;
+    self.layer.shadowRadius = 18.0;
     self.clipsToBounds = NO;
+    
+    _motionEffectH = [[UIInterpolatingMotionEffect alloc] initWithKeyPath:@"center.x" type:UIInterpolatingMotionEffectTypeTiltAlongHorizontalAxis];
+    _motionEffectH.minimumRelativeValue = @(-8);
+    _motionEffectH.maximumRelativeValue = @(8);
+    _motionEffectV = [[UIInterpolatingMotionEffect alloc] initWithKeyPath:@"center.y" type:UIInterpolatingMotionEffectTypeTiltAlongVerticalAxis];
+    _motionEffectV.minimumRelativeValue = @(-8);
+    _motionEffectV.maximumRelativeValue = @(8);
 #else
     // Rasterizing the cell layer increases rendering performance by quite a bit
     // but we want it unrasterized for tvOS where it must be scaled.
@@ -113,15 +117,34 @@ static UIImage* noImage;
         return;
     }
     
-    CGFloat targetScale = nextIsSelf ? 1.08 : 1.0;
-    CGFloat targetShadowOpacity = nextIsSelf ? 0.6 : 0.25;
-    CGFloat targetMaterialAlpha = nextIsSelf ? 0.75 : 0.55;
+    BOOL focused = nextIsSelf;
+    CGFloat targetScale = focused ? 1.1 : 1.0;
+    CGFloat scaleDiff = (self.bounds.size.height * targetScale - self.bounds.size.height) / 2.0;
+    CGAffineTransform targetTransform = focused ? CGAffineTransformTranslate(CGAffineTransformMakeScale(targetScale, targetScale), 0, -scaleDiff) : CGAffineTransformIdentity;
     
     [coordinator addCoordinatedAnimations:^{
-        self.transform = CGAffineTransformMakeScale(targetScale, targetScale);
-        self.layer.shadowOpacity = targetShadowOpacity;
-        self->_cardBackground.alpha = targetMaterialAlpha;
+        self.transform = targetTransform;
+        self.layer.shadowOffset = focused ? CGSizeMake(0, 16) : CGSizeMake(0, 0);
+        self.layer.shadowOpacity = focused ? 0.20 : 0.0;
+        self.layer.shadowRadius = 18.0;
     } completion:nil];
+    
+    if (focused) {
+        if (_motionEffectH != nil) {
+            [self addMotionEffect:_motionEffectH];
+        }
+        if (_motionEffectV != nil) {
+            [self addMotionEffect:_motionEffectV];
+        }
+    }
+    else {
+        if (_motionEffectH != nil) {
+            [self removeMotionEffect:_motionEffectH];
+        }
+        if (_motionEffectV != nil) {
+            [self removeMotionEffect:_motionEffectV];
+        }
+    }
 }
 #endif
 
@@ -204,7 +227,11 @@ static UIImage* noImage;
         _appLabel = [[UILabel alloc] init];
         [_appLabel setTextColor:[UIColor whiteColor]];
         [_appLabel setText:_app.name];
+#if TARGET_OS_TV
+        [_appLabel setFont:[UIFont systemFontOfSize:28 weight:UIFontWeightMedium]];
+#else
         [_appLabel setFont:[UIFont systemFontOfSize:24]];
+#endif
         [_appLabel setBaselineAdjustment:UIBaselineAdjustmentAlignCenters];
         [_appLabel setTextAlignment:NSTextAlignmentCenter];
         [_appLabel setLineBreakMode:NSLineBreakByWordWrapping];

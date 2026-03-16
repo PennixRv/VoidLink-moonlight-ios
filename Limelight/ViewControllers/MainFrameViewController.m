@@ -1082,13 +1082,9 @@ static NSMutableSet* hostList;
     _tvosBackgroundView = [[UIView alloc] initWithFrame:self.collectionView.bounds];
     _tvosBackgroundView.userInteractionEnabled = NO;
     _tvosBackgroundView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
-    
-    _tvosBackgroundGradientLayer = [CAGradientLayer layer];
-    _tvosBackgroundGradientLayer.startPoint = CGPointMake(0.0, 0.0);
-    _tvosBackgroundGradientLayer.endPoint = CGPointMake(1.0, 1.0);
-    _tvosBackgroundGradientLayer.frame = _tvosBackgroundView.bounds;
-    [_tvosBackgroundView.layer addSublayer:_tvosBackgroundGradientLayer];
-    
+
+    // Keep the Hosts view background simple and high-contrast. The card views provide
+    // their own material and focus feedback, so a busy gradient tends to look noisy.
     [self tvosUpdateBackgroundGradientColorsIfNeeded];
     
     self.collectionView.backgroundView = _tvosBackgroundView;
@@ -1097,33 +1093,33 @@ static NSMutableSet* hostList;
 
 - (void)tvosUpdateBackgroundGradientColorsIfNeeded
 {
-    if (_tvosBackgroundGradientLayer == nil) {
+    if (_tvosBackgroundView == nil) {
         return;
     }
     
-    UIColor* startColor = nil;
-    UIColor* endColor = nil;
+    UIColor* backgroundColor = [UIColor blackColor];
     
-    // Keep this subtle to avoid distracting from content and to keep contrast high.
     if (@available(tvOS 13.0, *)) {
         if (self.traitCollection.userInterfaceStyle == UIUserInterfaceStyleLight) {
-            startColor = [UIColor colorWithWhite:0.95 alpha:1.0];
-            endColor = [UIColor colorWithWhite:0.82 alpha:1.0];
+            backgroundColor = [UIColor colorWithWhite:0.95 alpha:1.0];
         }
         else {
-            startColor = [UIColor colorWithRed:0.06 green:0.07 blue:0.10 alpha:1.0];
-            endColor = [UIColor blackColor];
+            backgroundColor = [UIColor colorWithRed:0.06 green:0.07 blue:0.10 alpha:1.0];
         }
     }
     else {
-        startColor = [UIColor colorWithRed:0.06 green:0.07 blue:0.10 alpha:1.0];
-        endColor = [UIColor blackColor];
+        backgroundColor = [UIColor colorWithRed:0.06 green:0.07 blue:0.10 alpha:1.0];
     }
     
-    _tvosBackgroundGradientLayer.colors = @[
-        (__bridge id)startColor.CGColor,
-        (__bridge id)endColor.CGColor
-    ];
+    _tvosBackgroundView.backgroundColor = backgroundColor;
+
+    // Backward-compat: if a gradient layer exists from older builds, keep it in sync.
+    if (_tvosBackgroundGradientLayer != nil) {
+        _tvosBackgroundGradientLayer.colors = @[
+            (__bridge id)backgroundColor.CGColor,
+            (__bridge id)backgroundColor.CGColor
+        ];
+    }
 }
 #endif
 
