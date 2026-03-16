@@ -27,7 +27,7 @@
 #import "TemporaryApp.h"
 #import "IdManager.h"
 #import "ConnectionHelper.h"
-#import "VLTVOSUI.h"
+#import "../VLTVOSUI.h"
 
 #if !TARGET_OS_TV
 #import "SettingsViewController.h"

@@ -12,7 +12,7 @@
 #import "StreamManager.h"
 #import "ControllerSupport.h"
 #import "DataManager.h"
-#import "VLTVOSUI.h"
+#import "../VLTVOSUI.h"
 
 #include <sys/socket.h>
 #include <netinet/in.h>
