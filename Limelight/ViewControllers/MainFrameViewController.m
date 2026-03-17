@@ -33,6 +33,7 @@
 #import "SettingsViewController.h"
 #else
 #import <sys/utsname.h>
+#import <objc/message.h>
 #endif
 
 #import <VideoToolbox/VideoToolbox.h>
@@ -69,6 +70,20 @@
 #endif
 }
 static NSMutableSet* hostList;
+
+#if TARGET_OS_TV
+static BOOL VLTVOSIsEligibleForHDRPlayback(void)
+{
+    if (@available(tvOS 26.0, *)) {
+        SEL sel = @selector(eligibleForHDRPlayback);
+        if ([AVPlayer respondsToSelector:sel]) {
+            return ((BOOL (*)(id, SEL))objc_msgSend)(AVPlayer.class, sel);
+        }
+    }
+
+    return NO;
+}
+#endif
 
 - (void)startPairing:(NSString *)PIN {
     // Needs to be synchronous to ensure the alert is shown before any potential
@@ -715,20 +730,30 @@ static NSMutableSet* hostList;
     
     // HEVC is supported if the user wants it (or it's required by the chosen resolution) and the SoC supports it
     if ((_streamConfig.width > 4096 || _streamConfig.height > 4096 || streamSettings.enableHdr) && VTIsHardwareDecodeSupported(kCMVideoCodecType_HEVC)) {
-        _streamConfig.supportedVideoFormats |= VIDEO_FORMAT_H265;
-        
-        // HEVC Main10 is supported if the user wants it and the display supports it
-        if (streamSettings.enableHdr && (AVPlayer.availableHDRModes & AVPlayerHDRModeHDR10) != 0) {
-            _streamConfig.supportedVideoFormats |= VIDEO_FORMAT_H265_MAIN10;
-        }
-    }
+	        _streamConfig.supportedVideoFormats |= VIDEO_FORMAT_H265;
+	        
+	        // HEVC Main10 is supported if the user wants it and the display supports it
+	#if TARGET_OS_TV
+	        if (streamSettings.enableHdr && VLTVOSIsEligibleForHDRPlayback()) {
+	#else
+	        if (streamSettings.enableHdr && (AVPlayer.availableHDRModes & AVPlayerHDRModeHDR10) != 0) {
+	#endif
+	            _streamConfig.supportedVideoFormats |= VIDEO_FORMAT_H265_MAIN10;
+	        }
+	    }
     
 #if defined(__IPHONE_16_0) || defined(__TVOS_16_0)
-    // Add the AV1 Main10 format if AV1 and HDR are both enabled and supported
-    if ((_streamConfig.supportedVideoFormats & VIDEO_FORMAT_MASK_AV1) && streamSettings.enableHdr &&
-        VTIsHardwareDecodeSupported(kCMVideoCodecType_AV1) && (AVPlayer.availableHDRModes & AVPlayerHDRModeHDR10) != 0) {
-        _streamConfig.supportedVideoFormats |= VIDEO_FORMAT_AV1_MAIN10;
-    }
+	    // Add the AV1 Main10 format if AV1 and HDR are both enabled and supported
+	    if ((_streamConfig.supportedVideoFormats & VIDEO_FORMAT_MASK_AV1) && streamSettings.enableHdr &&
+	        VTIsHardwareDecodeSupported(kCMVideoCodecType_AV1)
+	#if TARGET_OS_TV
+	        && VLTVOSIsEligibleForHDRPlayback()
+	#else
+	        && (AVPlayer.availableHDRModes & AVPlayerHDRModeHDR10) != 0
+	#endif
+	        ) {
+	        _streamConfig.supportedVideoFormats |= VIDEO_FORMAT_AV1_MAIN10;
+	    }
 #endif
 }
 

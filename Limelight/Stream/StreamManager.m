@@ -184,9 +184,25 @@
     NSString* displayInfo;
     NSString* rangeInfo = [[NSUserDefaults standardUserDefaults] boolForKey:@"fullRangeVideo"] ? @"Full" : @"Limited";
     if (@available(tvOS 10.3, *)) {
+        UIScreen* screen = nil;
+        if (@available(tvOS 13.0, *)) {
+            screen = _renderView.window.windowScene.screen;
+        }
+        if (screen == nil && _renderView.window != nil) {
+            screen = _renderView.window.screen;
+        }
+        if (screen == nil) {
+            screen = [[UIScreen screens] firstObject];
+        }
+
+        NSInteger displayMaxFps = 0;
+        if (screen != nil) {
+            displayMaxFps = screen.maximumFramesPerSecond;
+        }
+
         displayInfo = [NSString stringWithFormat:@"\nRequested FPS: %d (Display max: %ld)\nVideo range: %@",
                        _config.frameRate,
-                       (long)[UIScreen mainScreen].maximumFramesPerSecond,
+                       (long)displayMaxFps,
                        rangeInfo];
     }
     else {

@@ -98,9 +98,10 @@
     _spinner = [[UIActivityIndicatorView alloc] init];
     [_spinner setUserInteractionEnabled:NO];
 #if TARGET_OS_TV
-    [_spinner setActivityIndicatorViewStyle:UIActivityIndicatorViewStyleWhiteLarge];
+	    [_spinner setActivityIndicatorViewStyle:UIActivityIndicatorViewStyleLarge];
+	    _spinner.color = [UIColor whiteColor];
 #else
-    [_spinner setActivityIndicatorViewStyle:UIActivityIndicatorViewStyleWhite];
+	    [_spinner setActivityIndicatorViewStyle:UIActivityIndicatorViewStyleWhite];
 #endif
     [_spinner sizeToFit];
     [_spinner startAnimating];
