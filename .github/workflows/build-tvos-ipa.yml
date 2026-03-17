@@ -2,20 +2,32 @@ name: Build tvOS IPA
 
 on:
   push:
-    branches: [Integration]
+    branches: [Integration, tvos26-only]
   pull_request:
-    branches: [Integration]
+    branches: [Integration, tvos26-only]
   workflow_dispatch:
 
 jobs:
   build-tvos:
-    runs-on: macos-latest
+    runs-on: macos-26
     timeout-minutes: 60
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
           submodules: recursive
+
+      - name: Verify Toolchain (Xcode 26 + tvOS 26 SDK)
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          xcodebuild -version
+          SDK_LIST="$(xcodebuild -showsdks)"
+          echo "${SDK_LIST}"
+
+          # Require tvOS 26 SDK to be present on the runner image
+          echo "${SDK_LIST}" | grep -E "appletvos26" >/dev/null
 
       - name: Build (tvOS)
         shell: bash
@@ -47,6 +59,25 @@ jobs:
           cp -R "${APP_PATH}" "${RUNNER_TEMP}/ipa/Payload/"
 
           (cd "${RUNNER_TEMP}/ipa" && zip -qry "${GITHUB_WORKSPACE}/VoidLink-tvOS.ipa" Payload)
+
+      - name: Build (tvOS Simulator)
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          DERIVED_DATA="${RUNNER_TEMP}/DerivedData-Sim"
+
+          xcodebuild \
+            -project Moonlight.xcodeproj \
+            -scheme "Moonlight TV" \
+            -configuration Release \
+            -sdk appletvsimulator \
+            -destination "generic/platform=tvOS Simulator" \
+            -derivedDataPath "${DERIVED_DATA}" \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            build
 
       - name: Upload IPA
         uses: actions/upload-artifact@v4
