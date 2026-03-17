@@ -205,7 +205,8 @@ static UIImage* noImage;
     _motionEffectV = VLTVOSCreateMotionEffect(@"center.y", UIInterpolatingMotionEffectTypeTiltAlongVerticalAxis);
 
     // Bottom title overlay: use Liquid Glass material on tvOS 26 to match the system design language.
-    _titleOverlayContainer = [[UIVisualEffectView alloc] initWithEffect:VLTVOSCardMaterialEffect(self.traitCollection, NO)];
+    _titleOverlayContainer = [[UIVisualEffectView alloc] initWithEffect:nil];
+    VLTVOSApplyCardMaterialToEffectView(_titleOverlayContainer, self.traitCollection, NO);
     _titleOverlayContainer.userInteractionEnabled = NO;
     _titleOverlayContainer.clipsToBounds = YES;
     _titleOverlayContainer.layer.cornerRadius = VLTVOSCardCornerRadius;
@@ -253,7 +254,7 @@ static UIImage* noImage;
     [coordinator addCoordinatedAnimations:^{
         // Prefer system focus visuals on tvOS. We only update lightweight UI pieces here.
         if (self->_titleOverlayContainer != nil) {
-            self->_titleOverlayContainer.effect = VLTVOSCardMaterialEffect(self.traitCollection, focused);
+            VLTVOSApplyCardMaterialToEffectView(self->_titleOverlayContainer, self.traitCollection, focused);
         }
     } completion:nil];
 
@@ -275,7 +276,7 @@ static UIImage* noImage;
     }
 
     if (_titleOverlayContainer != nil) {
-        _titleOverlayContainer.effect = VLTVOSCardMaterialEffect(self.traitCollection, focused);
+        VLTVOSApplyCardMaterialToEffectView(_titleOverlayContainer, self.traitCollection, focused);
         _titleLabel.textColor = VLTVOSCardForegroundColor(self.traitCollection, focused);
     }
 

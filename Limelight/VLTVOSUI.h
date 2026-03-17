@@ -126,6 +126,36 @@ static inline UIBlurEffectStyle VLTVOSCardBlurStyle(UITraitCollection* traits)
     return UIBlurEffectStyleDark;
 }
 
+static inline BOOL VLTVOSReduceTransparencyEnabled(void)
+{
+    return UIAccessibilityIsReduceTransparencyEnabled();
+}
+
+static inline BOOL VLTVOSDarkerSystemColorsEnabled(void)
+{
+    return UIAccessibilityDarkerSystemColorsEnabled();
+}
+
+static inline UIColor* VLTVOSSolidCardBackgroundColor(UITraitCollection* traits, BOOL focused)
+{
+    // When Reduce Transparency is enabled, tvOS expects more opaque surfaces.
+    // Use a subtle, system-like fill that still reads as "standard" without relying
+    // on iOS-only dynamic system background colors.
+    CGFloat alpha = focused ? 0.94 : 0.88;
+    if (VLTVOSDarkerSystemColorsEnabled()) {
+        alpha = focused ? 0.98 : 0.94;
+    }
+
+    if (@available(tvOS 13.0, *)) {
+        if (traits.userInterfaceStyle == UIUserInterfaceStyleLight) {
+            return [UIColor colorWithWhite:1.0 alpha:alpha];
+        }
+        return [UIColor colorWithWhite:0.12 alpha:alpha];
+    }
+
+    return [UIColor colorWithWhite:0.0 alpha:alpha];
+}
+
 static inline UIVisualEffect* VLTVOSCardMaterialEffect(UITraitCollection* traits, BOOL focused)
 {
     (void)traits;
@@ -139,6 +169,36 @@ static inline UIVisualEffect* VLTVOSCardMaterialEffect(UITraitCollection* traits
     }
 
     return [UIBlurEffect effectWithStyle:VLTVOSCardBlurStyle(traits)];
+}
+
+static inline void VLTVOSApplyCardMaterialToEffectView(UIVisualEffectView* effectView,
+                                                       UITraitCollection* traits,
+                                                       BOOL focused)
+{
+    if (effectView == nil) {
+        return;
+    }
+
+    // Default: let the system material do the work.
+    effectView.backgroundColor = [UIColor clearColor];
+    effectView.contentView.backgroundColor = [UIColor clearColor];
+
+    // Accessibility: honor Reduce Transparency by switching to an opaque-ish fill.
+    if (VLTVOSReduceTransparencyEnabled()) {
+        effectView.effect = nil;
+        effectView.contentView.backgroundColor = VLTVOSSolidCardBackgroundColor(traits, focused);
+        return;
+    }
+
+    effectView.effect = VLTVOSCardMaterialEffect(traits, focused);
+
+    // Accessibility: a small contrast boost without abandoning the system material.
+    if (VLTVOSDarkerSystemColorsEnabled()) {
+        if (@available(tvOS 13.0, *)) {
+            CGFloat overlayAlpha = (traits.userInterfaceStyle == UIUserInterfaceStyleLight) ? 0.06 : 0.16;
+            effectView.contentView.backgroundColor = [UIColor colorWithWhite:0.0 alpha:overlayAlpha];
+        }
+    }
 }
 
 #else

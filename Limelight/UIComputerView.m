@@ -87,7 +87,8 @@ static const int LABEL_DY = 20;
 
 #if TARGET_OS_TV
     // tvOS-style "material" card behind the host icon.
-    _cardBackground = [[UIVisualEffectView alloc] initWithEffect:VLTVOSCardMaterialEffect(self.traitCollection, NO)];
+    _cardBackground = [[UIVisualEffectView alloc] initWithEffect:nil];
+    VLTVOSApplyCardMaterialToEffectView(_cardBackground, self.traitCollection, NO);
     _cardBackground.frame = _hostIcon.frame;
     _cardBackground.userInteractionEnabled = NO;
     _cardBackground.alpha = 1.0;
@@ -167,7 +168,7 @@ static const int LABEL_DY = 20;
     if (@available(tvOS 13.0, *)) {
         if (previousTraitCollection.userInterfaceStyle != self.traitCollection.userInterfaceStyle) {
             // Keep material and text colors consistent with the system appearance.
-            _cardBackground.effect = VLTVOSCardMaterialEffect(self.traitCollection, self.isFocused);
+            VLTVOSApplyCardMaterialToEffectView(_cardBackground, self.traitCollection, self.isFocused);
             UIColor* fg = VLTVOSCardForegroundColor(self.traitCollection, self.isFocused);
             _hostLabel.textColor = fg;
             _hostIcon.tintColor = fg;
@@ -253,7 +254,7 @@ static const int LABEL_DY = 20;
     [coordinator addCoordinatedAnimations:^{
         // Let UIKit drive the standard tvOS focus visuals (scale/halo). We only
         // nudge the material for readability and "Liquid Glass" feel.
-        self->_cardBackground.effect = VLTVOSCardMaterialEffect(self.traitCollection, focused);
+        VLTVOSApplyCardMaterialToEffectView(self->_cardBackground, self.traitCollection, focused);
         self->_selectedHighlightView.hidden = !focused;
     } completion:nil];
     

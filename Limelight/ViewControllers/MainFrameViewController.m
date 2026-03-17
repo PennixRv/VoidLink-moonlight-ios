@@ -44,6 +44,7 @@
 @interface MainFrameViewController ()
 - (void)tvosInstallBackgroundIfNeeded;
 - (void)tvosUpdateBackgroundGradientColorsIfNeeded;
+- (void)tvosUpdateFocusGuides;
 @end
 #endif
 
@@ -67,6 +68,7 @@
     UITapGestureRecognizer* _menuRecognizer;
     UIView* _tvosBackgroundView;
     CAGradientLayer* _tvosBackgroundGradientLayer;
+    UIFocusGuide* _tvosTopToContentFocusGuide;
 #endif
 }
 static NSMutableSet* hostList;
@@ -82,6 +84,61 @@ static BOOL VLTVOSIsEligibleForHDRPlayback(void)
     }
 
     return NO;
+}
+#endif
+
+#if TARGET_OS_TV
+- (id<UIFocusEnvironment>)tvosPreferredHostFocusEnvironment
+{
+    if (hostScrollView == nil || hostScrollView.superview == nil) {
+        return nil;
+    }
+
+    for (UIView* view in hostScrollView.subviews) {
+        // UIComputerView tiles are UIButtons, so canBecomeFocused should be YES.
+        if ([view canBecomeFocused]) {
+            return view;
+        }
+    }
+
+    // Fallback: let the focus system pick a focusable descendant.
+    return hostScrollView;
+}
+
+- (void)tvosUpdateFocusGuides
+{
+    if (_tvosTopToContentFocusGuide == nil) {
+        return;
+    }
+
+    id<UIFocusEnvironment> preferred = nil;
+    if (_selectedHost == nil) {
+        preferred = [self tvosPreferredHostFocusEnvironment];
+    }
+
+    if (preferred == nil) {
+        preferred = self.collectionView;
+    }
+
+    _tvosTopToContentFocusGuide.preferredFocusEnvironments = @[preferred];
+}
+
+- (NSArray<id<UIFocusEnvironment>> *)preferredFocusEnvironments
+{
+    // When the view first appears (or after returning from Settings/foreground),
+    // bias focus toward the primary interactive surface instead of the nav bar.
+    if (_selectedHost == nil) {
+        id<UIFocusEnvironment> preferred = [self tvosPreferredHostFocusEnvironment];
+        if (preferred != nil) {
+            return @[preferred];
+        }
+    }
+
+    if (self.collectionView != nil) {
+        return @[self.collectionView];
+    }
+
+    return [super preferredFocusEnvironments];
 }
 #endif
 
@@ -321,6 +378,8 @@ static BOOL VLTVOSIsEligibleForHDRPlayback(void)
     // Remove the menu button intercept to allow the app to exit
     // when at the host selection view.
     [self.navigationController.view removeGestureRecognizer:_menuRecognizer];
+
+    BOOL wasShowingHosts = (hostScrollView.superview != nil);
 #endif
     
     [_appManager stopRetrieving];
@@ -333,6 +392,14 @@ static BOOL VLTVOSIsEligibleForHDRPlayback(void)
     
     [self.collectionView reloadData];
     [self.view addSubview:hostScrollView];
+
+#if TARGET_OS_TV
+    [self tvosUpdateFocusGuides];
+    if (!wasShowingHosts) {
+        [self setNeedsFocusUpdate];
+        [self updateFocusIfNeeded];
+    }
+#endif
 }
 
 - (void) receivedAssetForApp:(TemporaryApp*)app {
@@ -1050,6 +1117,22 @@ static BOOL VLTVOSIsEligibleForHDRPlayback(void)
     hostScrollView.frame = CGRectMake(0, self.navigationController.navigationBar.frame.origin.y + self.navigationController.navigationBar.frame.size.height, self.view.frame.size.width, self.view.frame.size.height / 2);
     [hostScrollView setShowsHorizontalScrollIndicator:NO];
     hostScrollView.delaysContentTouches = NO;
+
+#if TARGET_OS_TV
+    // Focus routing: provide a focus guide "landing zone" below the nav bar that can
+    // redirect focus into the main content (hosts row or apps grid).
+    if (_tvosTopToContentFocusGuide == nil) {
+        _tvosTopToContentFocusGuide = [[UIFocusGuide alloc] init];
+        [self.view addLayoutGuide:_tvosTopToContentFocusGuide];
+        [NSLayoutConstraint activateConstraints:@[
+            [_tvosTopToContentFocusGuide.topAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.topAnchor],
+            [_tvosTopToContentFocusGuide.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
+            [_tvosTopToContentFocusGuide.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
+            [_tvosTopToContentFocusGuide.heightAnchor constraintEqualToConstant:260.0],
+        ]];
+    }
+    [self tvosUpdateFocusGuides];
+#endif
     
     self.collectionView.delaysContentTouches = NO;
     self.collectionView.allowsMultipleSelection = NO;
@@ -1071,6 +1154,11 @@ static BOOL VLTVOSIsEligibleForHDRPlayback(void)
     else {
         [self updateTitle];
         [self.view addSubview:hostScrollView];
+#if TARGET_OS_TV
+        [self tvosUpdateFocusGuides];
+        [self setNeedsFocusUpdate];
+        [self updateFocusIfNeeded];
+#endif
     }
 }
 
@@ -1250,10 +1338,12 @@ static BOOL VLTVOSIsEligibleForHDRPlayback(void)
     
     [self.navigationController setNavigationBarHidden:NO animated:YES];
     
+#if !TARGET_OS_TV
     // Hide 1px border line
     UIImage* fakeImage = [[UIImage alloc] init];
     [self.navigationController.navigationBar setShadowImage:fakeImage];
     [self.navigationController.navigationBar setBackgroundImage:fakeImage forBarPosition:UIBarPositionAny barMetrics:UIBarMetricsDefault];
+#endif
     
     // Check for a pending shortcut action when appearing
     [self handlePendingShortcutAction];
@@ -1487,8 +1577,19 @@ static BOOL VLTVOSIsEligibleForHDRPlayback(void)
         _sortedAppList = visibleAppList;
     }
     
+#if TARGET_OS_TV
+    BOOL wasShowingHostSelection = (hostScrollView.superview != nil);
+#endif
     [hostScrollView removeFromSuperview];
     [self.collectionView reloadData];
+
+#if TARGET_OS_TV
+    [self tvosUpdateFocusGuides];
+    if (wasShowingHostSelection) {
+        [self setNeedsFocusUpdate];
+        [self updateFocusIfNeeded];
+    }
+#endif
 }
 
 - (UICollectionViewCell *)collectionView:(UICollectionView *)collectionView cellForItemAtIndexPath:(NSIndexPath *)indexPath {
