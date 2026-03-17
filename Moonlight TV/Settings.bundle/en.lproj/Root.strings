@@ -1,6 +1,10 @@
 /* Settings.bundle localized strings (English) */
 
 "settings_group_basic" = "Basic Configuration";
+"settings_stream_preset" = "Streaming Preset";
+"settings_stream_preset_custom" = "Custom";
+"settings_stream_preset_4k60" = "4K 60 FPS";
+"settings_stream_preset_2k120" = "2K 120 FPS";
 "settings_stream_resolution" = "Stream Resolution";
 "settings_framerate" = "Frame Rate";
 "settings_fps_30" = "30 FPS";

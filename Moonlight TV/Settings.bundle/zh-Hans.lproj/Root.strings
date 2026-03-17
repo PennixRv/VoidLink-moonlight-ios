@@ -1,6 +1,10 @@
 /* Settings.bundle localized strings (zh-Hans) */
 
 "settings_group_basic" = "基础配置";
+"settings_stream_preset" = "串流预设";
+"settings_stream_preset_custom" = "自定义";
+"settings_stream_preset_4k60" = "4K 60 帧";
+"settings_stream_preset_2k120" = "2K 120 帧";
 "settings_stream_resolution" = "串流分辨率";
 "settings_framerate" = "帧率";
 "settings_fps_30" = "30 帧";
@@ -34,4 +38,3 @@
 
 "settings_group_troubleshooting" = "故障排查";
 "settings_stats_overlay" = "统计信息叠加层";
-

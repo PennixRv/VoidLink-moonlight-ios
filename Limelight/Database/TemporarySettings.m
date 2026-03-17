@@ -67,6 +67,23 @@
         default:
             abort();
     }
+
+    // Optional one-click presets to avoid "it looks enabled but doesn't actually apply".
+    // If a preset is selected, it overrides resolution/FPS/bitrate settings.
+    NSString* streamPreset = [[NSUserDefaults standardUserDefaults] stringForKey:@"streamPreset"];
+    if ([streamPreset isEqualToString:@"4k60"]) {
+        self.width = [NSNumber numberWithInteger:3840];
+        self.height = [NSNumber numberWithInteger:2160];
+        self.framerate = [NSNumber numberWithInteger:60];
+        self.bitrate = [NSNumber numberWithInteger:100000];
+    }
+    else if ([streamPreset isEqualToString:@"2k120"]) {
+        self.width = [NSNumber numberWithInteger:2560];
+        self.height = [NSNumber numberWithInteger:1440];
+        self.framerate = [NSNumber numberWithInteger:120];
+        self.bitrate = [NSNumber numberWithInteger:120000];
+    }
+
     self.onscreenControls = [NSNumber numberWithInteger:OnScreenControlsLevelOff];
 #else
     self.bitrate = settings.bitrate;
