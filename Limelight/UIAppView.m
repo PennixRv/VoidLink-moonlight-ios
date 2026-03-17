@@ -135,8 +135,7 @@ static const float REFRESH_CYCLE = 1.0f;
 #if TARGET_OS_TV
     UIInterpolatingMotionEffect* _motionEffectH;
     UIInterpolatingMotionEffect* _motionEffectV;
-    UIView* _titleOverlayContainer;
-    CAGradientLayer* _titleGradientLayer;
+    UIVisualEffectView* _titleOverlayContainer;
     VLMarqueeLabel* _titleLabel;
 #endif
 }
@@ -205,8 +204,8 @@ static UIImage* noImage;
     _motionEffectH = VLTVOSCreateMotionEffect(@"center.x", UIInterpolatingMotionEffectTypeTiltAlongHorizontalAxis);
     _motionEffectV = VLTVOSCreateMotionEffect(@"center.y", UIInterpolatingMotionEffectTypeTiltAlongVerticalAxis);
 
-    // Bottom title overlay (gradient + marquee on focus), inspired by modern tvOS clients.
-    _titleOverlayContainer = [[UIView alloc] initWithFrame:CGRectZero];
+    // Bottom title overlay: use Liquid Glass material on tvOS 26 to match the system design language.
+    _titleOverlayContainer = [[UIVisualEffectView alloc] initWithEffect:VLTVOSCardMaterialEffect(self.traitCollection, NO)];
     _titleOverlayContainer.userInteractionEnabled = NO;
     _titleOverlayContainer.clipsToBounds = YES;
     _titleOverlayContainer.layer.cornerRadius = VLTVOSCardCornerRadius;
@@ -215,21 +214,11 @@ static UIImage* noImage;
         _titleOverlayContainer.layer.maskedCorners = kCALayerMinXMaxYCorner | kCALayerMaxXMaxYCorner;
     }
 
-    _titleGradientLayer = [CAGradientLayer layer];
-    _titleGradientLayer.startPoint = CGPointMake(0.5, 0.0);
-    _titleGradientLayer.endPoint = CGPointMake(0.5, 1.0);
-    _titleGradientLayer.locations = @[ @0.0, @1.0 ];
-    _titleGradientLayer.colors = @[
-        (__bridge id)[UIColor colorWithWhite:0.0 alpha:0.0].CGColor,
-        (__bridge id)[UIColor colorWithWhite:0.0 alpha:0.68].CGColor,
-    ];
-    [_titleOverlayContainer.layer insertSublayer:_titleGradientLayer atIndex:0];
-
     _titleLabel = [[VLMarqueeLabel alloc] initWithFrame:CGRectZero];
     _titleLabel.userInteractionEnabled = NO;
-    _titleLabel.font = [UIFont systemFontOfSize:30 weight:UIFontWeightSemibold];
-    _titleLabel.textColor = [UIColor whiteColor];
-    [_titleOverlayContainer addSubview:_titleLabel];
+    _titleLabel.font = [UIFont preferredFontForTextStyle:UIFontTextStyleTitle3];
+    _titleLabel.textColor = VLTVOSCardForegroundColor(self.traitCollection, NO);
+    [_titleOverlayContainer.contentView addSubview:_titleLabel];
 
     [_appImage.overlayContentView addSubview:_titleOverlayContainer];
 #else
@@ -260,16 +249,13 @@ static UIImage* noImage;
     }
     
     BOOL focused = nextIsSelf;
-    CGAffineTransform targetTransform = VLTVOSFocusTransformForBounds(self.bounds, focused);
     
     [coordinator addCoordinatedAnimations:^{
-        self.transform = targetTransform;
-        self.layer.shadowOffset = focused ? CGSizeMake(0, VLTVOSCardShadowOffsetYFocused) : CGSizeMake(0, 0);
-        self.layer.shadowOpacity = focused ? 0.20 : 0.0;
-        self.layer.shadowRadius = VLTVOSCardShadowRadiusFocused;
+        // Prefer system focus visuals on tvOS. We only update lightweight UI pieces here.
+        if (self->_titleOverlayContainer != nil) {
+            self->_titleOverlayContainer.effect = VLTVOSCardMaterialEffect(self.traitCollection, focused);
+        }
     } completion:nil];
-
-    VLTVOSUpdateMotionEffectsForFocus(self, _motionEffectH, _motionEffectV, focused);
 
     // Marquee only when focused to keep the screen calm.
     if (_titleLabel != nil) {
@@ -287,6 +273,12 @@ static UIImage* noImage;
     if (_titleLabel == nil) {
         return;
     }
+
+    if (_titleOverlayContainer != nil) {
+        _titleOverlayContainer.effect = VLTVOSCardMaterialEffect(self.traitCollection, focused);
+        _titleLabel.textColor = VLTVOSCardForegroundColor(self.traitCollection, focused);
+    }
+
     if (focused) {
         [_titleLabel startIfNeeded];
     }
@@ -447,13 +439,12 @@ static UIImage* noImage;
     }
 
 #if TARGET_OS_TV
-    if (_titleOverlayContainer != nil && _titleGradientLayer != nil && _titleLabel != nil) {
+    if (_titleOverlayContainer != nil && _titleLabel != nil) {
         CGFloat overlayHeight = 96.0;
         _titleOverlayContainer.frame = CGRectMake(0,
                                                   frameSize.height - overlayHeight,
                                                   frameSize.width,
                                                   overlayHeight);
-        _titleGradientLayer.frame = _titleOverlayContainer.bounds;
 
         // Insets tuned to keep Chinese readable without covering too much box art.
         CGFloat insetX = 18.0;

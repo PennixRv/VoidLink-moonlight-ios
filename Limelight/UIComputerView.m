@@ -55,9 +55,9 @@ static const int LABEL_DY = 20;
     _hostIcon = [[UIImageView alloc] initWithFrame:self.frame];
     _hostIcon.contentMode = UIViewContentModeScaleAspectFit;
 #if TARGET_OS_TV
-    // Use template rendering so we can invert tint colors on focus, similar to modern tvOS apps.
+    // Use template rendering so we can tint the icon using system colors.
     [_hostIcon setImage:[[UIImage imageNamed:@"Computer"] imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate]];
-    _hostIcon.tintColor = [UIColor whiteColor];
+    _hostIcon.tintColor = VLTVOSCardForegroundColor(self.traitCollection, NO);
 #else
     [_hostIcon setImage:[UIImage imageNamed:@"Computer"]];
 #endif
@@ -87,17 +87,22 @@ static const int LABEL_DY = 20;
 
 #if TARGET_OS_TV
     // tvOS-style "material" card behind the host icon.
-    _cardBackground = [[UIVisualEffectView alloc] initWithEffect:[UIBlurEffect effectWithStyle:VLTVOSCardBlurStyle(self.traitCollection)]];
+    _cardBackground = [[UIVisualEffectView alloc] initWithEffect:VLTVOSCardMaterialEffect(self.traitCollection, NO)];
     _cardBackground.frame = _hostIcon.frame;
     _cardBackground.userInteractionEnabled = NO;
-    _cardBackground.alpha = 0.7;
+    _cardBackground.alpha = 1.0;
     _cardBackground.clipsToBounds = YES;
     _cardBackground.layer.cornerRadius = VLTVOSCardCornerRadius;
     VLTVOSSetContinuousCornerIfAvailable(_cardBackground.layer);
     
     _selectedHighlightView = [[UIView alloc] initWithFrame:_cardBackground.bounds];
     _selectedHighlightView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
-    _selectedHighlightView.backgroundColor = [UIColor colorWithWhite:1.0 alpha:1.0];
+    if (@available(tvOS 13.0, *)) {
+        _selectedHighlightView.backgroundColor = [UIColor secondarySystemFillColor];
+    }
+    else {
+        _selectedHighlightView.backgroundColor = [UIColor colorWithWhite:1.0 alpha:0.10];
+    }
     _selectedHighlightView.hidden = YES;
     [_cardBackground.contentView addSubview:_selectedHighlightView];
     
@@ -160,8 +165,8 @@ static const int LABEL_DY = 20;
 
     if (@available(tvOS 13.0, *)) {
         if (previousTraitCollection.userInterfaceStyle != self.traitCollection.userInterfaceStyle) {
-            // Keep card blur and text colors consistent with the system appearance.
-            _cardBackground.effect = [UIBlurEffect effectWithStyle:VLTVOSCardBlurStyle(self.traitCollection)];
+            // Keep material and text colors consistent with the system appearance.
+            _cardBackground.effect = VLTVOSCardMaterialEffect(self.traitCollection, self.isFocused);
             UIColor* fg = VLTVOSCardForegroundColor(self.traitCollection, self.isFocused);
             _hostLabel.textColor = fg;
             _hostIcon.tintColor = fg;
@@ -176,7 +181,7 @@ static const int LABEL_DY = 20;
     }
 
     NSString* text = nil;
-    UIColor* color = [UIColor colorWithRed:0.98 green:0.31 blue:0.55 alpha:0.95];
+    UIColor* color = nil;
 
     if (_host == nil) {
         // Add-host tile doesn't need a badge.
@@ -185,20 +190,36 @@ static const int LABEL_DY = 20;
     else if (_host.state == StateOnline) {
         if (_host.pairState == PairStateUnpaired) {
             text = VLTVOS_STR(@"Pair", @"需配对");
-            color = [UIColor colorWithRed:0.98 green:0.62 blue:0.15 alpha:0.95];
+            if (@available(tvOS 13.0, *)) {
+                color = [[UIColor systemOrangeColor] colorWithAlphaComponent:0.90];
+            } else {
+                color = [UIColor colorWithRed:0.98 green:0.62 blue:0.15 alpha:0.95];
+            }
         }
         else {
             text = VLTVOS_STR(@"Online", @"在线");
-            color = [UIColor colorWithRed:0.23 green:0.78 blue:0.35 alpha:0.95];
+            if (@available(tvOS 13.0, *)) {
+                color = [[UIColor systemGreenColor] colorWithAlphaComponent:0.90];
+            } else {
+                color = [UIColor colorWithRed:0.23 green:0.78 blue:0.35 alpha:0.95];
+            }
         }
     }
     else if (_host.state == StateOffline) {
         text = VLTVOS_STR(@"Offline", @"离线");
-        color = [UIColor colorWithRed:0.95 green:0.23 blue:0.23 alpha:0.95];
+        if (@available(tvOS 13.0, *)) {
+            color = [[UIColor systemRedColor] colorWithAlphaComponent:0.90];
+        } else {
+            color = [UIColor colorWithRed:0.95 green:0.23 blue:0.23 alpha:0.95];
+        }
     }
     else {
         text = VLTVOS_STR(@"Connecting", @"连接中");
-        color = [UIColor colorWithRed:0.20 green:0.55 blue:0.95 alpha:0.95];
+        if (@available(tvOS 13.0, *)) {
+            color = [[UIColor systemBlueColor] colorWithAlphaComponent:0.90];
+        } else {
+            color = [UIColor colorWithRed:0.20 green:0.55 blue:0.95 alpha:0.95];
+        }
     }
 
     _statusBadgeContainer.hidden = (text == nil || text.length == 0);
@@ -227,24 +248,18 @@ static const int LABEL_DY = 20;
     }
     
     BOOL focused = nextIsSelf;
-    CGAffineTransform targetTransform = VLTVOSFocusTransformForBounds(self.bounds, focused);
     
     [coordinator addCoordinatedAnimations:^{
-        self.transform = targetTransform;
-        self.layer.shadowOffset = focused ? CGSizeMake(0, VLTVOSCardShadowOffsetYFocused) : CGSizeMake(0, 0);
-        self.layer.shadowOpacity = focused ? VLTVOSCardShadowOpacityFocused : VLTVOSCardShadowOpacityUnfocused;
-        self.layer.shadowRadius = focused ? VLTVOSCardShadowRadiusFocused : 16.0;
-        self->_cardBackground.alpha = focused ? 0.92 : 0.74;
+        // Let UIKit drive the standard tvOS focus visuals (scale/halo). We only
+        // nudge the material for readability and "Liquid Glass" feel.
+        self->_cardBackground.effect = VLTVOSCardMaterialEffect(self.traitCollection, focused);
+        self->_selectedHighlightView.hidden = !focused;
     } completion:nil];
-    
-    _selectedHighlightView.hidden = !focused;
     
     UIColor* fg = VLTVOSCardForegroundColor(self.traitCollection, focused);
     _hostIcon.tintColor = fg;
     _hostOverlay.tintColor = fg;
     _hostLabel.textColor = fg;
-
-    VLTVOSUpdateMotionEffectsForFocus(self, _motionEffectH, _motionEffectV, focused);
 }
 #endif
 

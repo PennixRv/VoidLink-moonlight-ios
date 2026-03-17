@@ -12,12 +12,14 @@
 
 #if TARGET_OS_TV
 
-static const CGFloat VLTVOSCardScaleFactor = 1.10;
-static const CGFloat VLTVOSCardShadowOpacityFocused = 0.16;
+// tvOS 26: prefer system-driven focus and materials. Keep our custom transforms subtle
+// so the app feels "standard tvOS" instead of a bespoke focus system.
+static const CGFloat VLTVOSCardScaleFactor = 1.06;
+static const CGFloat VLTVOSCardShadowOpacityFocused = 0.14;
 static const CGFloat VLTVOSCardShadowOpacityUnfocused = 0.0;
-static const CGFloat VLTVOSCardShadowRadiusFocused = 18.0;
-static const CGFloat VLTVOSCardShadowOffsetYFocused = 16.0;
-static const CGFloat VLTVOSCardMotionAmplitude = 8.0;
+static const CGFloat VLTVOSCardShadowRadiusFocused = 16.0;
+static const CGFloat VLTVOSCardShadowOffsetYFocused = 14.0;
+static const CGFloat VLTVOSCardMotionAmplitude = 0.0;
 static const CGFloat VLTVOSCardCornerRadius = 16.0;
 
 static inline BOOL VLTVOSIsZhHans(void)
@@ -94,39 +96,46 @@ static inline void VLTVOSUpdateMotionEffectsForFocus(UIView* view,
 
 static inline UIColor* VLTVOSCardForegroundColor(UITraitCollection* traits, BOOL focused)
 {
-    if (focused) {
-        return [UIColor blackColor];
-    }
+    (void)traits;
+    (void)focused;
 
-    // tvOS light mode tends to want dark text; dark mode wants light text.
     if (@available(tvOS 13.0, *)) {
-        if (traits.userInterfaceStyle == UIUserInterfaceStyleLight) {
-            return [UIColor blackColor];
-        }
+        return [UIColor labelColor];
     }
-
     return [UIColor whiteColor];
 }
 
 static inline UIColor* VLTVOSBackgroundBaseColor(UITraitCollection* traits)
 {
+    (void)traits;
     if (@available(tvOS 13.0, *)) {
-        if (traits.userInterfaceStyle == UIUserInterfaceStyleLight) {
-            return [UIColor colorWithWhite:0.95 alpha:1.0];
-        }
-        return [UIColor colorWithRed:0.06 green:0.07 blue:0.10 alpha:1.0];
+        return [UIColor systemBackgroundColor];
     }
     return [UIColor blackColor];
 }
 
 static inline UIBlurEffectStyle VLTVOSCardBlurStyle(UITraitCollection* traits)
 {
+    (void)traits;
     if (@available(tvOS 13.0, *)) {
-        if (traits.userInterfaceStyle == UIUserInterfaceStyleLight) {
-            return UIBlurEffectStyleLight;
-        }
+        return UIBlurEffectStyleSystemMaterial;
     }
     return UIBlurEffectStyleDark;
+}
+
+static inline UIVisualEffect* VLTVOSCardMaterialEffect(UITraitCollection* traits, BOOL focused)
+{
+    (void)traits;
+
+    // Liquid Glass (UIKit) is available on tvOS 26+. This gives the most "standard tvOS 26" look.
+    if (@available(tvOS 26.0, *)) {
+        UIGlassEffectStyle style = focused ? UIGlassEffectStyleClear : UIGlassEffectStyleRegular;
+        UIGlassEffect* effect = [UIGlassEffect effectWithStyle:style];
+        effect.interactive = YES;
+        return effect;
+    }
+
+    return [UIBlurEffect effectWithStyle:VLTVOSCardBlurStyle(traits)];
 }
 
 #else
@@ -134,4 +143,3 @@ static inline UIBlurEffectStyle VLTVOSCardBlurStyle(UITraitCollection* traits)
 #define VLTVOS_STR(en, zhHans) (en)
 
 #endif
-

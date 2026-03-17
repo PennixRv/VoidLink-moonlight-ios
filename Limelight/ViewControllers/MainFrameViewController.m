@@ -988,20 +988,15 @@ static NSMutableSet* hostList;
     [_menuRecognizer addTarget:self action: @selector(showHostSelectionView)];
     _menuRecognizer.allowedPressTypes = [[NSArray alloc] initWithObjects:[NSNumber numberWithLong:UIPressTypeMenu], nil];
 
-    // tvOS doesn't expose the full set of iOS 13 system dynamic colors, so we
-    // do a minimal appearance-aware setup here.
+    // tvOS 26: prefer system navigation bar appearance so we inherit Liquid Glass styling.
     UINavigationBar* navBar = self.navigationController.navigationBar;
-    UIColor* foregroundColor = [UIColor whiteColor];
-    UIColor* backgroundColor = [UIColor blackColor];
     if (@available(tvOS 13.0, *)) {
-        if (self.traitCollection.userInterfaceStyle == UIUserInterfaceStyleLight) {
-            foregroundColor = [UIColor blackColor];
-            backgroundColor = [UIColor whiteColor];
-        }
+        UINavigationBarAppearance* appearance = [[UINavigationBarAppearance alloc] init];
+        [appearance configureWithDefaultBackground];
+        navBar.standardAppearance = appearance;
+        navBar.scrollEdgeAppearance = appearance;
     }
-    navBar.barTintColor = backgroundColor;
-    navBar.tintColor = foregroundColor;
-    navBar.titleTextAttributes = @{ NSForegroundColorAttributeName: foregroundColor };
+    self.view.backgroundColor = VLTVOSBackgroundBaseColor(self.traitCollection);
 
     [self tvosInstallBackgroundIfNeeded];
 #endif
@@ -1139,14 +1134,6 @@ static NSMutableSet* hostList;
     _tvosBackgroundView.userInteractionEnabled = NO;
     _tvosBackgroundView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
 
-    // Subtle gradient gives depth without looking "busy".
-    _tvosBackgroundGradientLayer = [CAGradientLayer layer];
-    _tvosBackgroundGradientLayer.startPoint = CGPointMake(0.5, 0.0);
-    _tvosBackgroundGradientLayer.endPoint = CGPointMake(0.5, 1.0);
-    _tvosBackgroundGradientLayer.locations = @[ @0.0, @1.0 ];
-    _tvosBackgroundGradientLayer.frame = _tvosBackgroundView.bounds;
-    [_tvosBackgroundView.layer insertSublayer:_tvosBackgroundGradientLayer atIndex:0];
-
     [self tvosUpdateBackgroundGradientColorsIfNeeded];
     
     self.collectionView.backgroundView = _tvosBackgroundView;
@@ -1159,29 +1146,8 @@ static NSMutableSet* hostList;
         return;
     }
 
-    UIColor* bottomColor = VLTVOSBackgroundBaseColor(self.traitCollection);
-    UIColor* topColor = bottomColor;
-
-    if (@available(tvOS 13.0, *)) {
-        if (self.traitCollection.userInterfaceStyle == UIUserInterfaceStyleLight) {
-            topColor = [UIColor colorWithWhite:1.0 alpha:1.0];
-        }
-        else {
-            topColor = [UIColor colorWithRed:0.10 green:0.11 blue:0.16 alpha:1.0];
-        }
-    }
-    else {
-        topColor = [UIColor colorWithRed:0.10 green:0.11 blue:0.16 alpha:1.0];
-    }
-
-    _tvosBackgroundView.backgroundColor = bottomColor;
-
-    if (_tvosBackgroundGradientLayer != nil) {
-        _tvosBackgroundGradientLayer.colors = @[
-            (__bridge id)topColor.CGColor,
-            (__bridge id)bottomColor.CGColor
-        ];
-    }
+    // Keep the background simple and system-driven so the UI reads as "tvOS 26 standard".
+    _tvosBackgroundView.backgroundColor = VLTVOSBackgroundBaseColor(self.traitCollection);
 }
 #endif
 
