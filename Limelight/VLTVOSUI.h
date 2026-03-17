@@ -107,18 +107,21 @@ static inline UIColor* VLTVOSCardForegroundColor(UITraitCollection* traits, BOOL
 
 static inline UIColor* VLTVOSBackgroundBaseColor(UITraitCollection* traits)
 {
-    (void)traits;
     if (@available(tvOS 13.0, *)) {
-        return [UIColor systemBackgroundColor];
+        if (traits.userInterfaceStyle == UIUserInterfaceStyleLight) {
+            return [UIColor colorWithWhite:0.95 alpha:1.0];
+        }
+        return [UIColor colorWithRed:0.06 green:0.07 blue:0.10 alpha:1.0];
     }
     return [UIColor blackColor];
 }
 
 static inline UIBlurEffectStyle VLTVOSCardBlurStyle(UITraitCollection* traits)
 {
-    (void)traits;
     if (@available(tvOS 13.0, *)) {
-        return UIBlurEffectStyleSystemMaterial;
+        if (traits.userInterfaceStyle == UIUserInterfaceStyleLight) {
+            return UIBlurEffectStyleExtraLight;
+        }
     }
     return UIBlurEffectStyleDark;
 }

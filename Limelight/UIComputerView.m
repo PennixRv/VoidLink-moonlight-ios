@@ -97,12 +97,13 @@ static const int LABEL_DY = 20;
     
     _selectedHighlightView = [[UIView alloc] initWithFrame:_cardBackground.bounds];
     _selectedHighlightView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+    UIColor* highlightColor = [UIColor colorWithWhite:1.0 alpha:0.12];
     if (@available(tvOS 13.0, *)) {
-        _selectedHighlightView.backgroundColor = [UIColor secondarySystemFillColor];
+        if (self.traitCollection.userInterfaceStyle == UIUserInterfaceStyleLight) {
+            highlightColor = [UIColor colorWithWhite:0.0 alpha:0.06];
+        }
     }
-    else {
-        _selectedHighlightView.backgroundColor = [UIColor colorWithWhite:1.0 alpha:0.10];
-    }
+    _selectedHighlightView.backgroundColor = highlightColor;
     _selectedHighlightView.hidden = YES;
     [_cardBackground.contentView addSubview:_selectedHighlightView];
     
