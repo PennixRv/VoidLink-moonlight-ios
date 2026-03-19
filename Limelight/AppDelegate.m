@@ -81,8 +81,14 @@ static NSString* DB_NAME = @"Limelight_iOS.sqlite";
             }
             
 #if TARGET_OS_TV
-            NSData* dbData = [NSData dataWithContentsOfURL:[[[[NSFileManager defaultManager] URLsForDirectory:NSCachesDirectory inDomains:NSUserDomainMask] lastObject] URLByAppendingPathComponent:DB_NAME]];
-            [[NSUserDefaults standardUserDefaults] setObject:dbData forKey:DB_NAME];
+            NSData* dbData = [NSData dataWithContentsOfURL:[self getStoreURL]];
+            if (dbData != nil) {
+                [[NSUserDefaults standardUserDefaults] setObject:dbData forKey:DB_NAME];
+            }
+            else {
+                Log(LOG_W, @"No tvOS database payload available to mirror into NSUserDefaults");
+                [[NSUserDefaults standardUserDefaults] removeObjectForKey:DB_NAME];
+            }
 #endif
         }];
     }
@@ -125,7 +131,6 @@ static NSString* DB_NAME = @"Limelight_iOS.sqlite";
         return _persistentStoreCoordinator;
     }
     
-    NSError *error = nil;
     _persistentStoreCoordinator = [[NSPersistentStoreCoordinator alloc] initWithManagedObjectModel:[self managedObjectModel]];
     NSDictionary *options = [NSDictionary dictionaryWithObjectsAndKeys:
                              [NSNumber numberWithBool:YES], NSMigratePersistentStoresAutomaticallyOption,
@@ -142,18 +147,42 @@ static NSString* DB_NAME = @"Limelight_iOS.sqlite";
     
     // We must ensure the persistent store is ready to opened
     [self preparePersistentStore];
-    
-    if (![_persistentStoreCoordinator addPersistentStoreWithType:storeType configuration:nil URL:[self getStoreURL] options:options error:&error]) {
-        // Log the error
-        Log(LOG_E, @"Critical database error: %@, %@", error, [error userInfo]);
-        
-        // Drop the database
+
+    NSURL* storeURL = [self getStoreURL];
+    NSError* error = nil;
+
+    const int kMaxAttempts = 2;
+    for (int attempt = 1; attempt <= kMaxAttempts; attempt++) {
+        error = nil;
+        if ([_persistentStoreCoordinator addPersistentStoreWithType:storeType
+                                                     configuration:nil
+                                                               URL:storeURL
+                                                           options:options
+                                                             error:&error]) {
+            return _persistentStoreCoordinator;
+        }
+
+        Log(LOG_E, @"Critical database error (attempt %d/%d) opening %@ store at %@: %@, %@",
+            attempt, kMaxAttempts, storeType, storeURL, error, [error userInfo]);
+
         [self dropDatabase];
-        
-        // Try again
-        return [self persistentStoreCoordinator];
+        [self preparePersistentStore];
     }
-    
+
+#if TARGET_OS_TV
+    error = nil;
+    if (![_persistentStoreCoordinator addPersistentStoreWithType:NSInMemoryStoreType
+                                                   configuration:nil
+                                                             URL:nil
+                                                         options:options
+                                                           error:&error]) {
+        Log(LOG_E, @"Failed to create in-memory persistent store: %@, %@", error, [error userInfo]);
+    }
+    else {
+        Log(LOG_W, @"Using in-memory persistent store. Hosts/settings will not persist across launches.");
+    }
+#endif
+
     return _persistentStoreCoordinator;
 }
 
@@ -168,7 +197,10 @@ static NSString* DB_NAME = @"Limelight_iOS.sqlite";
 - (void) dropDatabase
 {
     // Delete the file on disk
-    [[NSFileManager defaultManager] removeItemAtURL:[self getStoreURL] error:nil];
+    NSURL* storeURL = [self getStoreURL];
+    if (storeURL != nil) {
+        [[NSFileManager defaultManager] removeItemAtURL:storeURL error:nil];
+    }
     
 #if TARGET_OS_TV
     // Also delete the copy in the NSUserDefaults on tvOS
@@ -180,9 +212,12 @@ static NSString* DB_NAME = @"Limelight_iOS.sqlite";
 {
 #if TARGET_OS_TV
     // On tvOS, we may need to inflate the DB from NSUserDefaults
-    NSArray *paths = NSSearchPathForDirectoriesInDomains(NSCachesDirectory, NSUserDomainMask, YES);
-    NSString *cacheDirectory = [paths objectAtIndex:0];
-    NSString *dbPath = [cacheDirectory stringByAppendingPathComponent:DB_NAME];
+    NSURL* storeURL = [self getStoreURL];
+    NSString* dbPath = storeURL.path;
+    if (storeURL == nil || dbPath.length == 0) {
+        Log(LOG_E, @"Unable to resolve tvOS database path");
+        return;
+    }
     
     // Always prefer the on disk version
     if (![[NSFileManager defaultManager] fileExistsAtPath:dbPath]) {
@@ -190,7 +225,10 @@ static NSString* DB_NAME = @"Limelight_iOS.sqlite";
         NSData* data = [[NSUserDefaults standardUserDefaults] dataForKey:DB_NAME];
         if (data != nil) {
             Log(LOG_I, @"Inflating database from NSUserDefaults");
-            [data writeToFile:dbPath atomically:YES];
+            NSError* writeError = nil;
+            if (![data writeToURL:storeURL options:NSDataWritingAtomic error:&writeError]) {
+                Log(LOG_E, @"Failed to inflate database from NSUserDefaults: %@", writeError);
+            }
         }
         else {
             Log(LOG_I, @"No database on disk or in NSUserDefaults");
