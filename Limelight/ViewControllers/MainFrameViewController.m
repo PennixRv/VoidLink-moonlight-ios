@@ -1080,14 +1080,8 @@ static BOOL VLTVOSIsEligibleForHDRPlayback(void)
     [_menuRecognizer addTarget:self action: @selector(showHostSelectionView)];
     _menuRecognizer.allowedPressTypes = [[NSArray alloc] initWithObjects:[NSNumber numberWithLong:UIPressTypeMenu], nil];
 
-    // tvOS 26: prefer system navigation bar appearance so we inherit Liquid Glass styling.
-    UINavigationBar* navBar = self.navigationController.navigationBar;
-    if (@available(tvOS 13.0, *)) {
-        UINavigationBarAppearance* appearance = [[UINavigationBarAppearance alloc] init];
-        [appearance configureWithDefaultBackground];
-        navBar.standardAppearance = appearance;
-        navBar.scrollEdgeAppearance = appearance;
-    }
+    // Let tvOS own the navigation bar appearance. Manually upgrading the bar to the
+    // UINavigationBarAppearance path can assert on device during the first layout pass.
     self.view.backgroundColor = VLTVOSBackgroundBaseColor(self.traitCollection);
 
     [self tvosInstallBackgroundIfNeeded];
