@@ -109,6 +109,15 @@ void DrStop(void)
     }
 }
 
+-(double) getVideoDisplayRefreshRate
+{
+    if (renderer == nil) {
+        return 0.0;
+    }
+
+    return [renderer currentDisplayRefreshRate];
+}
+
 int DrSubmitDecodeUnit(PDECODE_UNIT decodeUnit)
 {
     int offset = 0;

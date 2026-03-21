@@ -12,6 +12,9 @@
 
 #if TARGET_OS_TV
 
+#import <AVFoundation/AVFoundation.h>
+#import <objc/message.h>
+
 // tvOS 26: prefer system-driven focus and materials. Keep our custom transforms subtle
 // so the app feels "standard tvOS" instead of a bespoke focus system.
 static const CGFloat VLTVOSCardScaleFactor = 1.06;
@@ -39,6 +42,20 @@ static inline NSString* VLTVOSLocalized(NSString* en, NSString* zhHans)
 }
 
 #define VLTVOS_STR(en, zhHans) VLTVOSLocalized((en), (zhHans))
+
+static inline BOOL VLTVOSIsEligibleForHDRPlayback(void)
+{
+    SEL eligibleSelector = @selector(eligibleForHDRPlayback);
+    if ([AVPlayer respondsToSelector:eligibleSelector]) {
+        return ((BOOL (*)(id, SEL))objc_msgSend)(AVPlayer.class, eligibleSelector);
+    }
+
+    if (@available(tvOS 11.0, *)) {
+        return (AVPlayer.availableHDRModes & AVPlayerHDRModeHDR10) != 0;
+    }
+
+    return NO;
+}
 
 static inline void VLTVOSSetContinuousCornerIfAvailable(CALayer* layer)
 {
@@ -103,6 +120,17 @@ static inline UIColor* VLTVOSCardForegroundColor(UITraitCollection* traits, BOOL
         return [UIColor labelColor];
     }
     return [UIColor whiteColor];
+}
+
+static inline UIColor* VLTVOSSecondaryForegroundColor(UITraitCollection* traits, BOOL focused)
+{
+    (void)traits;
+
+    if (@available(tvOS 13.0, *)) {
+        return focused ? [UIColor labelColor] : [UIColor secondaryLabelColor];
+    }
+
+    return [UIColor colorWithWhite:1.0 alpha:focused ? 1.0 : 0.76];
 }
 
 static inline UIColor* VLTVOSBackgroundBaseColor(UITraitCollection* traits)

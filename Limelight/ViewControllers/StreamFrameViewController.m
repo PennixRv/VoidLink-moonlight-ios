@@ -41,6 +41,10 @@
     UITapGestureRecognizer *_menuDoubleTapGestureRecognizer;
     UITapGestureRecognizer *_playPauseTapGestureRecognizer;
     UITextView *_overlayView;
+#if TARGET_OS_TV
+    UIVisualEffectView *_overlayContainerView;
+    UILabel *_overlayLabel;
+#endif
     UILabel *_stageLabel;
     UILabel *_tipLabel;
     UIActivityIndicatorView *_spinner;
@@ -266,6 +270,58 @@
 }
 
 - (void)updateOverlayText:(NSString*)text {
+#if TARGET_OS_TV
+    if (_overlayContainerView == nil) {
+        _overlayContainerView = [[UIVisualEffectView alloc] initWithEffect:nil];
+        _overlayContainerView.userInteractionEnabled = NO;
+        _overlayContainerView.hidden = YES;
+        _overlayContainerView.clipsToBounds = YES;
+        _overlayContainerView.layer.cornerRadius = 20.0;
+        VLTVOSSetContinuousCornerIfAvailable(_overlayContainerView.layer);
+        VLTVOSApplyCardMaterialToEffectView(_overlayContainerView, self.traitCollection, NO);
+
+        _overlayLabel = [[UILabel alloc] init];
+        _overlayLabel.textAlignment = NSTextAlignmentCenter;
+        _overlayLabel.textColor = VLTVOSCardForegroundColor(self.traitCollection, NO);
+        _overlayLabel.font = [UIFont monospacedDigitSystemFontOfSize:16 weight:UIFontWeightSemibold];
+        _overlayLabel.adjustsFontSizeToFitWidth = YES;
+        _overlayLabel.minimumScaleFactor = 0.72;
+        _overlayLabel.lineBreakMode = NSLineBreakByTruncatingTail;
+        [_overlayContainerView.contentView addSubview:_overlayLabel];
+        [self.view addSubview:_overlayContainerView];
+    }
+
+    if (text != nil) {
+        BOOL multiline = [text containsString:@"\n"];
+        CGFloat horizontalInset = multiline ? 22.0 : 20.0;
+        CGFloat verticalInset = multiline ? 14.0 : 12.0;
+        CGFloat maxWidth = multiline ? self.view.bounds.size.width * 0.72 : self.view.bounds.size.width - 160.0;
+
+        _overlayLabel.numberOfLines = multiline ? 0 : 1;
+        _overlayLabel.text = text;
+        CGSize labelSize = [_overlayLabel sizeThatFits:CGSizeMake(maxWidth - horizontalInset * 2, CGFLOAT_MAX)];
+        CGFloat containerWidth = MIN(maxWidth, labelSize.width + horizontalInset * 2);
+        CGFloat containerHeight = labelSize.height + verticalInset * 2;
+        CGFloat topInset = self.view.safeAreaInsets.top + 24.0;
+
+        _overlayContainerView.frame = CGRectMake((self.view.bounds.size.width - containerWidth) / 2.0,
+                                                 topInset,
+                                                 containerWidth,
+                                                 containerHeight);
+        _overlayLabel.frame = CGRectMake(horizontalInset,
+                                         verticalInset,
+                                         containerWidth - horizontalInset * 2,
+                                         containerHeight - verticalInset * 2);
+        _overlayContainerView.hidden = NO;
+        VLTVOSApplyCardMaterialToEffectView(_overlayContainerView, self.traitCollection, NO);
+        _overlayLabel.textColor = VLTVOSCardForegroundColor(self.traitCollection, NO);
+    }
+    else {
+        _overlayContainerView.hidden = YES;
+    }
+    return;
+#endif
+
     if (_overlayView == nil) {
         _overlayView = [[UITextView alloc] init];
 #if !TARGET_OS_TV
@@ -382,13 +438,23 @@
         [self->_streamView showOnScreenControls];
         
         [self->_controllerSupport connectionEstablished];
+
+#if TARGET_OS_TV
+        [self updatePreferredDisplayMode:YES];
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.75 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            if (self.view.window != nil) {
+                [self updatePreferredDisplayMode:YES];
+            }
+        });
+#endif
         
         if (self->_settings.statsOverlay) {
-            self->_statsUpdateTimer = [NSTimer scheduledTimerWithTimeInterval:1.0f
-                                                                       target:self
-                                                                     selector:@selector(updateStatsOverlay)
-                                                                     userInfo:nil
-                                                                      repeats:YES];
+            self->_statsUpdateTimer = [NSTimer timerWithTimeInterval:1.0f
+                                                              target:self
+                                                            selector:@selector(updateStatsOverlay)
+                                                            userInfo:nil
+                                                             repeats:YES];
+            [[NSRunLoop mainRunLoop] addTimer:self->_statsUpdateTimer forMode:NSRunLoopCommonModes];
         }
     });
 }
@@ -620,8 +686,20 @@
 - (void) updatePreferredDisplayMode:(BOOL)streamActive {
 #if TARGET_OS_TV
     if (@available(tvOS 11.2, *)) {
-        UIWindow* window = [[[UIApplication sharedApplication] delegate] window];
+        UIWindow* window = self.view.window;
+        if (window == nil) {
+            window = [[[UIApplication sharedApplication] delegate] window];
+        }
+        if (window == nil) {
+            Log(LOG_W, @"Skipping display mode update because the stream window is unavailable");
+            return;
+        }
+
         AVDisplayManager* displayManager = [window avDisplayManager];
+        if (displayManager == nil) {
+            Log(LOG_W, @"Skipping display mode update because AVDisplayManager is unavailable");
+            return;
+        }
         
         // This logic comes from Kodi and MrMC
         if (streamActive) {
@@ -634,7 +712,8 @@
                 dynamicRange = 0; // SDR
             }
             
-            AVDisplayCriteria* displayCriteria = [[AVDisplayCriteria alloc] initWithRefreshRate:[_settings.framerate floatValue]
+            float preferredRefreshRate = self.streamConfig.frameRate > 0 ? self.streamConfig.frameRate : [_settings.framerate floatValue];
+            AVDisplayCriteria* displayCriteria = [[AVDisplayCriteria alloc] initWithRefreshRate:preferredRefreshRate
                                                                               videoDynamicRange:dynamicRange];
             displayManager.preferredDisplayCriteria = displayCriteria;
         }

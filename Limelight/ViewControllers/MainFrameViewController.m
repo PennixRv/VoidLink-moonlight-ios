@@ -74,20 +74,6 @@
 static NSMutableSet* hostList;
 
 #if TARGET_OS_TV
-static BOOL VLTVOSIsEligibleForHDRPlayback(void)
-{
-    if (@available(tvOS 26.0, *)) {
-        SEL sel = @selector(eligibleForHDRPlayback);
-        if ([AVPlayer respondsToSelector:sel]) {
-            return ((BOOL (*)(id, SEL))objc_msgSend)(AVPlayer.class, sel);
-        }
-    }
-
-    return NO;
-}
-#endif
-
-#if TARGET_OS_TV
 - (id<UIFocusEnvironment>)tvosPreferredHostFocusEnvironment
 {
     if (hostScrollView == nil || hostScrollView.superview == nil) {
@@ -1241,6 +1227,12 @@ static BOOL VLTVOSIsEligibleForHDRPlayback(void)
     _tvosBackgroundView.userInteractionEnabled = NO;
     _tvosBackgroundView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
 
+    _tvosBackgroundGradientLayer = [CAGradientLayer layer];
+    _tvosBackgroundGradientLayer.startPoint = CGPointMake(0.0, 0.0);
+    _tvosBackgroundGradientLayer.endPoint = CGPointMake(1.0, 1.0);
+    _tvosBackgroundGradientLayer.frame = _tvosBackgroundView.bounds;
+    [_tvosBackgroundView.layer insertSublayer:_tvosBackgroundGradientLayer atIndex:0];
+
     [self tvosUpdateBackgroundGradientColorsIfNeeded];
     
     self.collectionView.backgroundView = _tvosBackgroundView;
@@ -1253,8 +1245,32 @@ static BOOL VLTVOSIsEligibleForHDRPlayback(void)
         return;
     }
 
-    // Keep the background simple and system-driven so the UI reads as "tvOS 26 standard".
     _tvosBackgroundView.backgroundColor = VLTVOSBackgroundBaseColor(self.traitCollection);
+    if (_tvosBackgroundGradientLayer != nil) {
+        if (@available(tvOS 13.0, *)) {
+            if (self.traitCollection.userInterfaceStyle == UIUserInterfaceStyleLight) {
+                _tvosBackgroundGradientLayer.colors = @[
+                    (id)[UIColor colorWithWhite:0.98 alpha:1.0].CGColor,
+                    (id)[UIColor colorWithRed:0.90 green:0.95 blue:0.99 alpha:1.0].CGColor,
+                    (id)[UIColor colorWithRed:0.96 green:0.98 blue:1.0 alpha:1.0].CGColor
+                ];
+            }
+            else {
+                _tvosBackgroundGradientLayer.colors = @[
+                    (id)[UIColor colorWithRed:0.05 green:0.06 blue:0.09 alpha:1.0].CGColor,
+                    (id)[UIColor colorWithRed:0.09 green:0.13 blue:0.19 alpha:1.0].CGColor,
+                    (id)[UIColor colorWithRed:0.03 green:0.05 blue:0.08 alpha:1.0].CGColor
+                ];
+            }
+        }
+        else {
+            _tvosBackgroundGradientLayer.colors = @[
+                (id)[UIColor colorWithWhite:0.0 alpha:1.0].CGColor,
+                (id)[UIColor colorWithRed:0.07 green:0.10 blue:0.15 alpha:1.0].CGColor
+            ];
+        }
+        _tvosBackgroundGradientLayer.locations = @[@0.0, @0.52, @1.0];
+    }
 }
 #endif
 

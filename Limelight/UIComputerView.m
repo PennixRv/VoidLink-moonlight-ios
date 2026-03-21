@@ -27,13 +27,15 @@
     UIInterpolatingMotionEffect* _motionEffectV;
     UIView* _statusBadgeContainer;
     UILabel* _statusBadgeLabel;
+    UIVisualEffectView* _titleOverlayContainer;
+    UILabel* _hostSubtitleLabel;
 #endif
 }
 static const float REFRESH_CYCLE = 2.0f;
 
 #if TARGET_OS_TV
-static const int ITEM_PADDING = 50;
-static const int LABEL_DY = 40;
+static const int ITEM_PADDING = 36;
+static const int LABEL_DY = 0;
 #else
 static const int ITEM_PADDING = 0;
 static const int LABEL_DY = 20;
@@ -43,7 +45,7 @@ static const int LABEL_DY = 20;
     self = [super init];
         
 #if TARGET_OS_TV
-    self.frame = CGRectMake(0, 0, 400, 400);
+    self.frame = CGRectMake(0, 0, 360, 360);
 #else
     if (UI_USER_INTERFACE_IDIOM() == UIUserInterfaceIdiomPad) {
         self.frame = CGRectMake(0, 0, 200, 200);
@@ -74,7 +76,10 @@ static const int LABEL_DY = 20;
     _hostLabel = [[UILabel alloc] init];
 #if TARGET_OS_TV
     _hostLabel.textColor = VLTVOSCardForegroundColor(self.traitCollection, NO);
-    _hostLabel.font = [UIFont systemFontOfSize:34 weight:UIFontWeightSemibold];
+    _hostLabel.font = [UIFont preferredFontForTextStyle:UIFontTextStyleHeadline];
+    _hostLabel.numberOfLines = 1;
+    _hostLabel.adjustsFontSizeToFitWidth = YES;
+    _hostLabel.minimumScaleFactor = 0.78;
 #else
     _hostLabel.textColor = [UIColor whiteColor];
 #endif
@@ -111,12 +116,33 @@ static const int LABEL_DY = 20;
     _motionEffectH = VLTVOSCreateMotionEffect(@"center.x", UIInterpolatingMotionEffectTypeTiltAlongHorizontalAxis);
     _motionEffectV = VLTVOSCreateMotionEffect(@"center.y", UIInterpolatingMotionEffectTypeTiltAlongVerticalAxis);
 
+    _titleOverlayContainer = [[UIVisualEffectView alloc] initWithEffect:nil];
+    VLTVOSApplyCardMaterialToEffectView(_titleOverlayContainer, self.traitCollection, NO);
+    _titleOverlayContainer.userInteractionEnabled = NO;
+    _titleOverlayContainer.clipsToBounds = YES;
+    _titleOverlayContainer.layer.cornerRadius = VLTVOSCardCornerRadius;
+    VLTVOSSetContinuousCornerIfAvailable(_titleOverlayContainer.layer);
+    if (@available(tvOS 11.0, *)) {
+        _titleOverlayContainer.layer.maskedCorners = kCALayerMinXMaxYCorner | kCALayerMaxXMaxYCorner;
+    }
+
+    _hostSubtitleLabel = [[UILabel alloc] initWithFrame:CGRectZero];
+    _hostSubtitleLabel.userInteractionEnabled = NO;
+    _hostSubtitleLabel.font = [UIFont preferredFontForTextStyle:UIFontTextStyleFootnote];
+    _hostSubtitleLabel.textColor = VLTVOSSecondaryForegroundColor(self.traitCollection, NO);
+    _hostSubtitleLabel.numberOfLines = 1;
+    _hostSubtitleLabel.adjustsFontSizeToFitWidth = YES;
+    _hostSubtitleLabel.minimumScaleFactor = 0.75;
+
+    [_titleOverlayContainer.contentView addSubview:_hostLabel];
+    [_titleOverlayContainer.contentView addSubview:_hostSubtitleLabel];
+
     // A small corner badge for quick status scanning (online/offline/pairing).
     _statusBadgeContainer = [[UIView alloc] initWithFrame:CGRectZero];
     _statusBadgeContainer.userInteractionEnabled = NO;
     _statusBadgeContainer.hidden = YES;
-    _statusBadgeContainer.backgroundColor = [UIColor colorWithRed:0.98 green:0.31 blue:0.55 alpha:0.95];
-    _statusBadgeContainer.layer.cornerRadius = 12.0;
+    _statusBadgeContainer.backgroundColor = [UIColor colorWithWhite:0.15 alpha:0.90];
+    _statusBadgeContainer.layer.cornerRadius = 10.0;
     if (@available(tvOS 11.0, *)) {
         _statusBadgeContainer.layer.maskedCorners = kCALayerMinXMaxYCorner;
     }
@@ -126,14 +152,16 @@ static const int LABEL_DY = 20;
     _statusBadgeLabel = [[UILabel alloc] initWithFrame:CGRectZero];
     _statusBadgeLabel.userInteractionEnabled = NO;
     _statusBadgeLabel.textColor = [UIColor whiteColor];
-    _statusBadgeLabel.font = [UIFont systemFontOfSize:20 weight:UIFontWeightSemibold];
+    _statusBadgeLabel.font = [UIFont systemFontOfSize:16 weight:UIFontWeightSemibold];
     [_statusBadgeContainer addSubview:_statusBadgeLabel];
 #endif
     
 #if TARGET_OS_TV
     [self addSubview:_cardBackground];
 #endif
+#if !TARGET_OS_TV
     [self addSubview:_hostLabel];
+#endif
     [self addSubview:_hostIcon];
     
 #if TARGET_OS_TV
@@ -148,6 +176,7 @@ static const int LABEL_DY = 20;
     
     [_hostIcon.overlayContentView addSubview:_hostOverlay];
     [_hostIcon.overlayContentView addSubview:_hostSpinner];
+    [_hostIcon.overlayContentView addSubview:_titleOverlayContainer];
 #else
     [self addSubview:_hostOverlay];
     [self addSubview:_hostSpinner];
@@ -173,8 +202,56 @@ static const int LABEL_DY = 20;
             _hostLabel.textColor = fg;
             _hostIcon.tintColor = fg;
             _hostOverlay.tintColor = fg;
+            _hostSubtitleLabel.textColor = VLTVOSSecondaryForegroundColor(self.traitCollection, self.isFocused);
+            VLTVOSApplyCardMaterialToEffectView(_titleOverlayContainer, self.traitCollection, self.isFocused);
         }
     }
+}
+
+- (NSString*)tvosSubtitleTextForHost:(TemporaryHost*)host
+{
+    if (host == nil) {
+        return VLTVOS_STR(@"Enter IP address or hostname", @"输入 IP 地址或主机名");
+    }
+
+    if (host.state == StateOnline) {
+        if (host.pairState == PairStateUnpaired) {
+            return VLTVOS_STR(@"Pair before streaming", @"配对后即可串流");
+        }
+
+        return VLTVOS_STR(@"Ready to stream", @"已就绪，可开始串流");
+    }
+
+    if (host.state == StateOffline) {
+        return VLTVOS_STR(@"Check network or wake the PC", @"请检查网络或尝试唤醒主机");
+    }
+
+    return VLTVOS_STR(@"Checking availability", @"正在检测主机状态");
+}
+
+- (void)tvosLayoutTitleOverlay
+{
+    if (_titleOverlayContainer == nil || _hostLabel == nil || _hostSubtitleLabel == nil) {
+        return;
+    }
+
+    CGFloat overlayHeight = 82.0;
+    _titleOverlayContainer.frame = CGRectMake(0,
+                                              _hostIcon.bounds.size.height - overlayHeight,
+                                              _hostIcon.bounds.size.width,
+                                              overlayHeight);
+
+    CGFloat insetX = 18.0;
+    CGFloat titleTop = 11.0;
+    CGFloat subtitleSpacing = 1.0;
+    CGFloat titleHeight = 26.0;
+    CGFloat availableWidth = _titleOverlayContainer.bounds.size.width - insetX * 2;
+
+    _hostLabel.frame = CGRectMake(insetX, titleTop, availableWidth, titleHeight);
+    _hostSubtitleLabel.frame = CGRectMake(insetX,
+                                          CGRectGetMaxY(_hostLabel.frame) + subtitleSpacing,
+                                          availableWidth,
+                                          _titleOverlayContainer.bounds.size.height - CGRectGetMaxY(_hostLabel.frame) - subtitleSpacing - 12.0);
 }
 
 - (void)tvosUpdateStatusBadge {
@@ -230,8 +307,8 @@ static const int LABEL_DY = 20;
     [_statusBadgeLabel sizeToFit];
 
     // Layout: pin to top-right, with internal padding.
-    CGFloat paddingX = 10.0;
-    CGFloat paddingY = 6.0;
+    CGFloat paddingX = 8.0;
+    CGFloat paddingY = 5.0;
     CGFloat w = _statusBadgeLabel.bounds.size.width + paddingX * 2;
     CGFloat h = _statusBadgeLabel.bounds.size.height + paddingY * 2;
     _statusBadgeContainer.frame = CGRectMake(_cardBackground.bounds.size.width - w, 0, w, h);
@@ -255,6 +332,7 @@ static const int LABEL_DY = 20;
         // Let UIKit drive the standard tvOS focus visuals (scale/halo). We only
         // nudge the material for readability and "Liquid Glass" feel.
         VLTVOSApplyCardMaterialToEffectView(self->_cardBackground, self.traitCollection, focused);
+        VLTVOSApplyCardMaterialToEffectView(self->_titleOverlayContainer, self.traitCollection, focused);
         self->_selectedHighlightView.hidden = !focused;
     } completion:nil];
     
@@ -262,6 +340,7 @@ static const int LABEL_DY = 20;
     _hostIcon.tintColor = fg;
     _hostOverlay.tintColor = fg;
     _hostLabel.textColor = fg;
+    _hostSubtitleLabel.textColor = VLTVOSSecondaryForegroundColor(self.traitCollection, focused);
 }
 #endif
 
@@ -283,7 +362,11 @@ static const int LABEL_DY = 20;
     [self addTarget:self action:@selector(addClicked) forControlEvents:UIControlEventPrimaryActionTriggered];
     
     [_hostLabel setText:VLTVOS_STR(@"Add Host Manually", @"手动添加主机")];
+#if TARGET_OS_TV
+    _hostSubtitleLabel.text = [self tvosSubtitleTextForHost:nil];
+#else
     [_hostLabel sizeToFit];
+#endif
     
     [_hostOverlay setImage:[UIImage imageNamed:@"AddOverlayIcon"]];
     
@@ -326,39 +409,58 @@ static const int LABEL_DY = 20;
 }
 
 - (void) updateBounds {
+#if TARGET_OS_TV
+    self.bounds = CGRectMake(_hostIcon.frame.origin.x - ITEM_PADDING,
+                             _hostIcon.frame.origin.y - ITEM_PADDING,
+                             _hostIcon.frame.size.width + 2 * ITEM_PADDING,
+                             _hostIcon.frame.size.height + 2 * ITEM_PADDING);
+
+    // Keep the material card pinned to the icon region (not the label).
+    _cardBackground.frame = _hostIcon.frame;
+    [self tvosLayoutTitleOverlay];
+    [self tvosUpdateStatusBadge];
+    return;
+#else
     float x = FLT_MAX;
     float y = FLT_MAX;
     float width = 0;
     float height;
     
     float iconX = _hostIcon.frame.origin.x + _hostIcon.frame.size.width / 2;
+#if !TARGET_OS_TV
     _hostLabel.center = CGPointMake(iconX, _hostIcon.frame.origin.y + _hostIcon.frame.size.height + LABEL_DY);
+#endif
     
     x = MIN(x, _hostIcon.frame.origin.x);
+#if !TARGET_OS_TV
     x = MIN(x, _hostLabel.frame.origin.x);
+#endif
     
     y = MIN(y, _hostIcon.frame.origin.y);
+#if !TARGET_OS_TV
     y = MIN(y, _hostLabel.frame.origin.y);
+#endif
 
     width = MAX(width, _hostIcon.frame.size.width);
+#if !TARGET_OS_TV
     width = MAX(width, _hostLabel.frame.size.width);
+#endif
     
     height = _hostIcon.frame.size.height +
         _hostLabel.frame.size.height +
         LABEL_DY / 2;
     
     self.bounds = CGRectMake(x - ITEM_PADDING, y - ITEM_PADDING, width + 2 * ITEM_PADDING, height + 2 * ITEM_PADDING);
-    
-#if TARGET_OS_TV
-    // Keep the material card pinned to the icon region (not the label).
-    _cardBackground.frame = _hostIcon.frame;
-    [self tvosUpdateStatusBadge];
 #endif
 }
 
 - (void) updateContentsForHost:(TemporaryHost*)host {
-    _hostLabel.text = _host.name;
+    _hostLabel.text = host.name;
+#if TARGET_OS_TV
+    _hostSubtitleLabel.text = [self tvosSubtitleTextForHost:host];
+#else
     [_hostLabel sizeToFit];
+#endif
     
     if (host.state == StateOnline) {
         [_hostSpinner stopAnimating];

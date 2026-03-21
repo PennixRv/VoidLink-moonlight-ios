@@ -35,6 +35,7 @@ extern int ff_isom_write_av1c(AVIOContext *pb, const uint8_t *buf, int size,
     
     CADisplayLink* _displayLink;
     BOOL framePacing;
+    double _displayRefreshRate;
 }
 
 #if TARGET_OS_TV
@@ -137,6 +138,29 @@ extern int ff_isom_write_av1c(AVIOContext *pb, const uint8_t *buf, int size,
     }
 }
 
+- (BOOL)recoverDisplayLayerFromFailureIfPossible
+{
+    if (displayLayer.status != AVQueuedSampleBufferRenderingStatusFailed) {
+        return YES;
+    }
+
+    NSError* renderError = displayLayer.error;
+    if (@available(iOS 11.0, tvOS 11.0, *)) {
+        if (displayLayer.requiresFlushToResumeDecoding) {
+            Log(LOG_W, @"Display layer requested flush after failure: %@", renderError);
+            [displayLayer flushAndRemoveImage];
+            return YES;
+        }
+    }
+
+    Log(LOG_E, @"Display layer rendering failed: %@", renderError);
+
+    // Fall back to a full layer reset only when a flush-style recovery path
+    // is unavailable. This preserves the previous \"request IDR\" behavior.
+    [self reinitializeDisplayLayer];
+    return NO;
+}
+
 - (id)initWithView:(StreamView*)view callbacks:(id<ConnectionCallbacks>)callbacks streamAspectRatio:(float)aspectRatio useFramePacing:(BOOL)useFramePacing
 {
     self = [super init];
@@ -168,7 +192,8 @@ extern int ff_isom_write_av1c(AVIOContext *pb, const uint8_t *buf, int size,
     else {
         _displayLink.preferredFramesPerSecond = self->frameRate;
     }
-    [_displayLink addToRunLoop:[NSRunLoop mainRunLoop] forMode:NSDefaultRunLoopMode];
+    _displayRefreshRate = 0.0;
+    [_displayLink addToRunLoop:[NSRunLoop mainRunLoop] forMode:NSRunLoopCommonModes];
 }
 
 // TODO: Refactor this
@@ -178,6 +203,11 @@ int DrSubmitDecodeUnit(PDECODE_UNIT decodeUnit);
 {
     VIDEO_FRAME_HANDLE handle;
     PDECODE_UNIT du;
+
+    CFTimeInterval frameDuration = sender.targetTimestamp - sender.timestamp;
+    if (frameDuration > 0.0) {
+        _displayRefreshRate = 1.0 / frameDuration;
+    }
     
     while (LiPollNextVideoFrame(&handle, &du)) {
         LiCompleteVideoFrame(handle, DrSubmitDecodeUnit(du));
@@ -203,6 +233,11 @@ int DrSubmitDecodeUnit(PDECODE_UNIT decodeUnit);
 - (void)stop
 {
     [_displayLink invalidate];
+}
+
+- (double)currentDisplayRefreshRate
+{
+    return _displayRefreshRate;
 }
 
 #define NALU_START_PREFIX_SIZE 3
@@ -593,14 +628,8 @@ int DrSubmitDecodeUnit(PDECODE_UNIT decodeUnit);
     }
     
     // Check for previous decoder errors before doing anything
-    if (displayLayer.status == AVQueuedSampleBufferRenderingStatusFailed) {
-        Log(LOG_E, @"Display layer rendering failed: %@", displayLayer.error);
-        
-        // Recreate the display layer. We are already on the main thread,
-        // so this is safe to do right here.
-        [self reinitializeDisplayLayer];
-        
-        // Request an IDR frame to initialize the new decoder
+    if (![self recoverDisplayLayerFromFailureIfPossible]) {
+        // Request an IDR frame to initialize the new decoder after a hard reset.
         free(data);
         return DR_NEED_IDR;
     }

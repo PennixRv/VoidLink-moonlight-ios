@@ -158,71 +158,93 @@
         return nil;
     }
     
+    float interval = stats.endTime - stats.startTime;
+    if (interval <= 0.0f) {
+        return nil;
+    }
+
+    float averageFps = stats.totalFrames / interval;
+    float droppedPercentage = stats.totalFrames > 0 ? (100.0f * stats.networkDroppedFrames / (float)stats.totalFrames) : 0.0f;
+
     uint32_t rtt, variance;
-    NSString* latencyString;
-    if (LiGetEstimatedRttInfo(&rtt, &variance)) {
-        latencyString = [NSString stringWithFormat:@"%u ms (variance: %u ms)", rtt, variance];
-    }
-    else {
-        latencyString = @"N/A";
-    }
-    
+    BOOL hasRtt = LiGetEstimatedRttInfo(&rtt, &variance);
+    NSString* latencyString = hasRtt ? [NSString stringWithFormat:@"%u ms (variance: %u ms)", rtt, variance] : @"N/A";
     NSString* hostProcessingString;
+    float hostProcessingAverageMs = 0.0f;
     if (stats.framesWithHostProcessingLatency != 0) {
+        hostProcessingAverageMs = (float)stats.totalHostProcessingLatency / stats.framesWithHostProcessingLatency / 10.f;
         hostProcessingString = [NSString stringWithFormat:@"\nHost processing latency min/max/avg: %.1f/%.1f/%.1f ms",
                                 stats.minHostProcessingLatency / 10.f,
                                 stats.maxHostProcessingLatency / 10.f,
-                                (float)stats.totalHostProcessingLatency / stats.framesWithHostProcessingLatency / 10.f];
+                                hostProcessingAverageMs];
     }
     else {
         hostProcessingString = @"";
     }
-    
-    float interval = stats.endTime - stats.startTime;
 
 #if TARGET_OS_TV
-    NSString* displayInfo;
     NSString* rangeInfo = [[NSUserDefaults standardUserDefaults] boolForKey:@"fullRangeVideo"] ? @"Full" : @"Limited";
-    if (@available(tvOS 10.3, *)) {
-        UIScreen* screen = nil;
-        if (@available(tvOS 13.0, *)) {
-            screen = _renderView.window.windowScene.screen;
-        }
-        if (screen == nil && _renderView.window != nil) {
-            screen = _renderView.window.screen;
-        }
-        if (screen == nil) {
-            screen = [[UIScreen screens] firstObject];
-        }
+    UIScreen* screen = nil;
+    if (@available(tvOS 13.0, *)) {
+        screen = _renderView.window.windowScene.screen;
+    }
+    if (screen == nil && _renderView.window != nil) {
+        screen = _renderView.window.screen;
+    }
+    if (screen == nil) {
+        screen = [[UIScreen screens] firstObject];
+    }
 
-        NSInteger displayMaxFps = 0;
-        if (screen != nil) {
-            displayMaxFps = screen.maximumFramesPerSecond;
-        }
+    NSInteger displayMaxFps = 0;
+    if (screen != nil) {
+        displayMaxFps = screen.maximumFramesPerSecond;
+    }
 
-        displayInfo = [NSString stringWithFormat:@"\nRequested FPS: %d (Display max: %ld)\nVideo range: %@",
-                       _config.frameRate,
-                       (long)displayMaxFps,
-                       rangeInfo];
+    NSMutableArray<NSString*>* segments = [NSMutableArray array];
+    [segments addObject:[NSString stringWithFormat:@"%dx%d", _config.width, _config.height]];
+    [segments addObject:[NSString stringWithFormat:@"%.1f fps", averageFps]];
+    [segments addObject:[_connection getActiveCodecName]];
+
+    double displayRefreshRate = [_connection getVideoDisplayRefreshRate];
+    if (displayRefreshRate > 0.0) {
+        [segments addObject:[NSString stringWithFormat:@"Output %.1f Hz", displayRefreshRate]];
+    }
+    else if (displayMaxFps > 0) {
+        [segments addObject:[NSString stringWithFormat:@"Display %ld Hz", (long)displayMaxFps]];
+    }
+
+    if (hasRtt) {
+        [segments addObject:[NSString stringWithFormat:@"RTT %u±%u ms", rtt, variance]];
     }
     else {
-        displayInfo = [NSString stringWithFormat:@"\nRequested FPS: %d\nVideo range: %@",
-                       _config.frameRate,
-                       rangeInfo];
+        [segments addObject:@"RTT N/A"];
     }
+
+    [segments addObject:[NSString stringWithFormat:@"Drop %.1f%%", droppedPercentage]];
+
+    if (stats.framesWithHostProcessingLatency != 0) {
+        [segments addObject:[NSString stringWithFormat:@"Host %.1f ms", hostProcessingAverageMs]];
+    }
+
+    [segments addObject:[NSString stringWithFormat:@"%@ range", rangeInfo]];
+
+    if (LiGetCurrentHostDisplayHdrMode()) {
+        [segments addObject:@"HDR"];
+    }
+
+    return [segments componentsJoinedByString:@"  •  "];
 #else
     NSString* displayInfo = @"";
-#endif
-
     return [NSString stringWithFormat:@"Video stream: %dx%d %.2f FPS (Codec: %@)\nFrames dropped by your network connection: %.2f%%\nAverage network latency: %@%@%@",
             _config.width,
             _config.height,
-            stats.totalFrames / interval,
+            averageFps,
             [_connection getActiveCodecName],
-            stats.networkDroppedFrames / interval,
+            droppedPercentage,
             latencyString,
             hostProcessingString,
             displayInfo];
+#endif
 }
 
 @end

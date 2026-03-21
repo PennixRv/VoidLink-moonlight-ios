@@ -9,6 +9,9 @@
 #import "SettingsViewController.h"
 #import "TemporarySettings.h"
 #import "DataManager.h"
+#if TARGET_OS_TV
+#import "../VLTVOSUI.h"
+#endif
 
 #import <VideoToolbox/VideoToolbox.h>
 #import <AVFoundation/AVFoundation.h>
@@ -231,9 +234,22 @@ BOOL isCustomResolution(CGSize res) {
             break;
     }
     
-    if (!VTIsHardwareDecodeSupported(kCMVideoCodecType_HEVC) || !(AVPlayer.availableHDRModes & AVPlayerHDRModeHDR10)) {
+    if (!VTIsHardwareDecodeSupported(kCMVideoCodecType_HEVC)
+#if TARGET_OS_TV
+        || !VLTVOSIsEligibleForHDRPlayback()
+#else
+        || !(AVPlayer.availableHDRModes & AVPlayerHDRModeHDR10)
+#endif
+        ) {
         [self.hdrSelector removeAllSegments];
-        [self.hdrSelector insertSegmentWithTitle:@"Unsupported on this device" atIndex:0 animated:NO];
+        [self.hdrSelector insertSegmentWithTitle:
+#if TARGET_OS_TV
+         VLTVOS_STR(@"Unsupported on this device", @"此设备不支持 HDR")
+#else
+         @"Unsupported on this device"
+#endif
+                                       atIndex:0
+                                      animated:NO];
         [self.hdrSelector setEnabled:NO];
     }
     else {
