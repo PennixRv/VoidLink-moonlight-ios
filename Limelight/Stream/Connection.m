@@ -74,7 +74,7 @@ void DrStop(void)
         [videoStatsLock unlock];
         return YES;
     }
-    
+
     // No stats yet
     [videoStatsLock unlock];
     return NO;
@@ -118,6 +118,24 @@ void DrStop(void)
     return [renderer currentDisplayRefreshRate];
 }
 
+-(double) getVideoRenderedFps
+{
+    if (renderer == nil) {
+        return 0.0;
+    }
+
+    return [renderer currentRenderedFps];
+}
+
+-(double) getAverageDecoderLatencyMs
+{
+    if (renderer == nil) {
+        return 0.0;
+    }
+
+    return [renderer averageDecoderLatencyMs];
+}
+
 int DrSubmitDecodeUnit(PDECODE_UNIT decodeUnit)
 {
     int offset = 0;
@@ -127,7 +145,7 @@ int DrSubmitDecodeUnit(PDECODE_UNIT decodeUnit)
         // A frame was lost due to OOM condition
         return DR_NEED_IDR;
     }
-    
+
     CFTimeInterval now = CACurrentMediaTime();
     if (!lastFrameNumber) {
         currentVideoStats.startTime = now;
@@ -137,34 +155,34 @@ int DrSubmitDecodeUnit(PDECODE_UNIT decodeUnit)
         // Flip stats roughly every second
         if (now - currentVideoStats.startTime >= 1.0f) {
             currentVideoStats.endTime = now;
-            
+
             [videoStatsLock lock];
             lastVideoStats = currentVideoStats;
             [videoStatsLock unlock];
-            
+
             memset(&currentVideoStats, 0, sizeof(currentVideoStats));
             currentVideoStats.startTime = now;
         }
-        
+
         // Any frame number greater than m_LastFrameNumber + 1 represents a dropped frame
         currentVideoStats.networkDroppedFrames += decodeUnit->frameNumber - (lastFrameNumber + 1);
         currentVideoStats.totalFrames += decodeUnit->frameNumber - (lastFrameNumber + 1);
         lastFrameNumber = decodeUnit->frameNumber;
     }
-    
+
     if (decodeUnit->frameHostProcessingLatency != 0) {
         if (currentVideoStats.minHostProcessingLatency == 0 || decodeUnit->frameHostProcessingLatency < currentVideoStats.minHostProcessingLatency) {
             currentVideoStats.minHostProcessingLatency = decodeUnit->frameHostProcessingLatency;
         }
-        
+
         if (decodeUnit->frameHostProcessingLatency > currentVideoStats.maxHostProcessingLatency) {
             currentVideoStats.maxHostProcessingLatency = decodeUnit->frameHostProcessingLatency;
         }
-        
+
         currentVideoStats.framesWithHostProcessingLatency++;
         currentVideoStats.totalHostProcessingLatency += decodeUnit->frameHostProcessingLatency;
     }
-    
+
     currentVideoStats.receivedFrames++;
     currentVideoStats.totalFrames++;
 
@@ -200,12 +218,12 @@ int ArInit(int audioConfiguration, POPUS_MULTISTREAM_CONFIGURATION opusConfig, v
 {
     int err;
     SDL_AudioSpec want, have;
-    
+
     if (SDL_InitSubSystem(SDL_INIT_AUDIO) < 0) {
         Log(LOG_E, @"Failed to initialize audio subsystem: %s\n", SDL_GetError());
         return -1;
     }
-        
+
     SDL_zero(want);
     want.freq = opusConfig->sampleRate;
     want.format = AUDIO_S16;
@@ -218,7 +236,7 @@ int ArInit(int audioConfiguration, POPUS_MULTISTREAM_CONFIGURATION opusConfig, v
         ArCleanup();
         return -1;
     }
-    
+
     audioConfig = *opusConfig;
     audioFrameSize = opusConfig->samplesPerFrame * sizeof(short) * opusConfig->channelCount;
     audioBuffer = SDL_malloc(audioFrameSize);
@@ -227,7 +245,7 @@ int ArInit(int audioConfiguration, POPUS_MULTISTREAM_CONFIGURATION opusConfig, v
         ArCleanup();
         return -1;
     }
-    
+
     opusDecoder = opus_multistream_decoder_create(opusConfig->sampleRate,
                                                   opusConfig->channelCount,
                                                   opusConfig->streams,
@@ -239,13 +257,13 @@ int ArInit(int audioConfiguration, POPUS_MULTISTREAM_CONFIGURATION opusConfig, v
         ArCleanup();
         return -1;
     }
-    
+
     // Start playback
     SDL_PauseAudioDevice(audioDevice, 0);
-    
+
     // Disable lowering volume of other audio streams (SDL sets AVAudioSessionCategoryOptionDuckOthers by default)
     [[AVAudioSession sharedInstance] setCategory:AVAudioSessionCategoryPlayback withOptions:AVAudioSessionCategoryOptionMixWithOthers error:nil];
-    
+
     return 0;
 }
 
@@ -255,30 +273,30 @@ void ArCleanup(void)
         opus_multistream_decoder_destroy(opusDecoder);
         opusDecoder = NULL;
     }
-    
+
     if (audioDevice != 0) {
         SDL_CloseAudioDevice(audioDevice);
         audioDevice = 0;
     }
-    
+
     if (audioBuffer != NULL) {
         SDL_free(audioBuffer);
         audioBuffer = NULL;
     }
-    
+
     SDL_QuitSubSystem(SDL_INIT_AUDIO);
 }
 
 void ArDecodeAndPlaySample(char* sampleData, int sampleLength)
 {
     int decodeLen;
-    
+
     // Don't queue if there's already more than 30 ms of audio data waiting
     // in Moonlight's audio queue.
     if (LiGetPendingAudioDuration() > 30) {
         return;
     }
-    
+
     decodeLen = opus_multistream_decode(opusDecoder, (unsigned char *)sampleData, sampleLength,
                                         (short*)audioBuffer, audioConfig.samplesPerFrame, 0);
     if (decodeLen > 0) {
@@ -287,7 +305,7 @@ void ArDecodeAndPlaySample(char* sampleData, int sampleLength)
         while (SDL_GetQueuedAudioSize(audioDevice) / audioFrameSize > 10) {
             SDL_Delay(1);
         }
-        
+
         if (SDL_QueueAudio(audioDevice,
                            audioBuffer,
                            sizeof(short) * decodeLen * audioConfig.channelCount) < 0) {
@@ -367,7 +385,7 @@ void ClSetControllerLED(uint16_t controllerNumber, uint8_t r, uint8_t g, uint8_t
     // won't be able to acquire it if LiStartConnection is in
     // progress.
     LiInterruptConnection();
-    
+
     // We dispatch this async to get out because this can be invoked
     // on a thread inside common and we don't want to deadlock. It also avoids
     // blocking on the caller's thread waiting to acquire initLock.
@@ -387,11 +405,11 @@ void ClSetControllerLED(uint16_t controllerNumber, uint8_t r, uint8_t g, uint8_t
     if (initLock == nil) {
         initLock = [[NSLock alloc] init];
     }
-    
+
     if (videoStatsLock == nil) {
         videoStatsLock = [[NSLock alloc] init];
     }
-    
+
     NSString *rawAddress = [Utils addressPortStringToAddress:config.host];
     strncpy(_hostString,
             [rawAddress cStringUsingEncoding:NSUTF8StringEncoding],
@@ -431,12 +449,12 @@ void ClSetControllerLED(uint16_t controllerNumber, uint8_t r, uint8_t g, uint8_t
     _streamConfig.bitrate = config.bitRate;
     _streamConfig.supportedVideoFormats = config.supportedVideoFormats;
     _streamConfig.audioConfiguration = config.audioConfiguration;
-    
+
     // Since we require iOS 12 or above, we're guaranteed to be running
     // on a 64-bit device with ARMv8 crypto instructions, so we don't
     // need to check for that here.
     _streamConfig.encryptionFlags = ENCFLG_ALL;
-    
+
     if ([Utils isActiveNetworkVPN]) {
         // Force remote streaming mode when a VPN is connected
         _streamConfig.streamingRemotely = STREAM_CFG_REMOTE;

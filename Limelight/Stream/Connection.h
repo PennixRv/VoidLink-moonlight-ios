@@ -31,5 +31,7 @@ typedef struct {
 -(BOOL) getVideoStats:(video_stats_t*)stats;
 -(NSString*) getActiveCodecName;
 -(double) getVideoDisplayRefreshRate;
+-(double) getVideoRenderedFps;
+-(double) getAverageDecoderLatencyMs;
 
 @end

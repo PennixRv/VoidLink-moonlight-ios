@@ -39,10 +39,10 @@
 
 - (void)main {
     [CryptoManager generateKeyPairUsingSSL];
-    
+
     HttpManager* hMan = [[HttpManager alloc] initWithAddress:_config.host httpsPort:_config.httpsPort
                                                      serverCert:_config.serverCert];
-    
+
     ServerInfoResponse* serverInfoResp = [[ServerInfoResponse alloc] init];
     [hMan executeRequestSynchronously:[HttpRequest requestForResponse:serverInfoResp withUrlRequest:[hMan newServerInfoRequest:false]
                                        fallbackError:401 fallbackRequest:[hMan newHttpServerInfoRequest]]];
@@ -58,13 +58,13 @@
         [_callbacks launchFailed:@"Failed to connect to PC"];
         return;
     }
-    
+
     if (![pairStatus isEqualToString:@"1"]) {
         // Not paired
         [_callbacks launchFailed:@"Device not paired to PC"];
         return;
     }
-    
+
     // Only perform this check on GFE (as indicated by MJOLNIR in state value)
     if ((_config.width > 4096 || _config.height > 4096) && [serverState containsString:@"MJOLNIR"]) {
         // Pascal added support for 8K HEVC encoding support. Maxwell 2 could encode HEVC but only up to 4K.
@@ -75,11 +75,11 @@
             return;
         }
     }
-    
+
     // Populate the config's version fields from serverinfo
     _config.appVersion = appversion;
     _config.gfeVersion = gfeVersion;
-    
+
     // resumeApp and launchApp handle calling launchFailed
     NSString* sessionUrl;
     if ([serverState hasSuffix:@"_SERVER_BUSY"]) {
@@ -93,10 +93,10 @@
             return;
         }
     }
-    
+
     // Populate RTSP session URL from launch/resume response
     _config.rtspSessionUrl = sessionUrl;
-    
+
     // Initializing the renderer must be done on the main thread
     dispatch_async(dispatch_get_main_queue(), ^{
         VideoDecoderRenderer* renderer = [[VideoDecoderRenderer alloc] initWithView:self->_renderView callbacks:self->_callbacks streamAspectRatio:(float)self->_config.width / (float)self->_config.height useFramePacing:self->_config.useFramePacing];
@@ -109,6 +109,15 @@
 - (void) stopStream
 {
     [_connection terminate];
+}
+
+- (double) currentDisplayRefreshRate
+{
+    if (_connection == nil) {
+        return 0.0;
+    }
+
+    return [_connection getVideoDisplayRefreshRate];
 }
 
 - (BOOL) launchApp:(HttpManager*)hMan receiveSessionUrl:(NSString**)sessionUrl {
@@ -124,7 +133,7 @@
         Log(LOG_E, @"Failed to parse game session");
         return FALSE;
     }
-    
+
     *sessionUrl = [launchResp getStringTag:@"sessionUrl0"];
     return TRUE;
 }
@@ -142,29 +151,32 @@
         Log(LOG_E, @"Failed to parse resume response");
         return FALSE;
     }
-    
+
     *sessionUrl = [resumeResp getStringTag:@"sessionUrl0"];
     return TRUE;
 }
 
 - (NSString*) getStatsOverlayText {
     video_stats_t stats;
-    
+
     if (!_connection) {
         return nil;
     }
-    
+
     if (![_connection getVideoStats:&stats]) {
         return nil;
     }
-    
+
     float interval = stats.endTime - stats.startTime;
     if (interval <= 0.0f) {
         return nil;
     }
 
-    float averageFps = stats.totalFrames / interval;
+    float streamFps = stats.totalFrames / interval;
+    float incomingFps = stats.receivedFrames / interval;
     float droppedPercentage = stats.totalFrames > 0 ? (100.0f * stats.networkDroppedFrames / (float)stats.totalFrames) : 0.0f;
+    double renderedFps = [_connection getVideoRenderedFps];
+    double decodeLatencyMs = [_connection getAverageDecoderLatencyMs];
 
     uint32_t rtt, variance;
     BOOL hasRtt = LiGetEstimatedRttInfo(&rtt, &variance);
@@ -201,9 +213,25 @@
     }
 
     NSMutableArray<NSString*>* segments = [NSMutableArray array];
-    [segments addObject:[NSString stringWithFormat:@"%dx%d", _config.width, _config.height]];
-    [segments addObject:[NSString stringWithFormat:@"%.1f fps", averageFps]];
+    if (_config.requestedWidth > 0 && _config.requestedHeight > 0 && _config.requestedFrameRate > 0 &&
+        (_config.requestedWidth != _config.width ||
+         _config.requestedHeight != _config.height ||
+         _config.requestedFrameRate != _config.frameRate)) {
+        [segments addObject:[NSString stringWithFormat:@"Req %dx%d@%d", _config.requestedWidth, _config.requestedHeight, _config.requestedFrameRate]];
+        [segments addObject:[NSString stringWithFormat:@"Use %dx%d@%d", _config.width, _config.height, _config.frameRate]];
+    }
+    else {
+        [segments addObject:[NSString stringWithFormat:@"%dx%d@%d", _config.width, _config.height, _config.frameRate]];
+    }
     [segments addObject:[_connection getActiveCodecName]];
+    [segments addObject:[NSString stringWithFormat:@"In %.1f", incomingFps]];
+    [segments addObject:[NSString stringWithFormat:@"Stream %.1f", streamFps]];
+    if (renderedFps > 0.0) {
+        [segments addObject:[NSString stringWithFormat:@"Render %.1f", renderedFps]];
+    }
+    if (decodeLatencyMs > 0.0) {
+        [segments addObject:[NSString stringWithFormat:@"Decode %.1f ms", decodeLatencyMs]];
+    }
 
     double displayRefreshRate = [_connection getVideoDisplayRefreshRate];
     if (displayRefreshRate > 0.0) {
@@ -227,6 +255,9 @@
     }
 
     [segments addObject:[NSString stringWithFormat:@"%@ range", rangeInfo]];
+    if (!_config.effectiveSops) {
+        [segments addObject:@"SOPS off"];
+    }
 
     if (LiGetCurrentHostDisplayHdrMode()) {
         [segments addObject:@"HDR"];

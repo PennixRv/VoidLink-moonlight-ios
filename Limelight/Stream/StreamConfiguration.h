@@ -20,16 +20,24 @@
 @property int height;
 @property int frameRate;
 @property int bitRate;
+@property int requestedWidth;
+@property int requestedHeight;
+@property int requestedFrameRate;
+@property int requestedBitRate;
+@property int displayMaximumRefreshRate;
 @property int riKeyId;
 @property NSData* riKey;
 @property int gamepadMask;
 @property BOOL optimizeGameSettings;
+@property BOOL effectiveSops;
 @property BOOL playAudioOnPC;
 @property BOOL swapABXYButtons;
 @property int audioConfiguration;
 @property int supportedVideoFormats;
 @property BOOL multiController;
 @property BOOL useFramePacing;
+@property BOOL requestedHdr;
+@property NSArray<NSString*>* launchWarnings;
 @property NSData* serverCert;
 
 @end

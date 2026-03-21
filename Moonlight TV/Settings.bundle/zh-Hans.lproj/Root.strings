@@ -30,6 +30,7 @@
 "settings_codec_auto" = "自动";
 "settings_codec_h264" = "H.264";
 "settings_codec_hevc" = "HEVC";
+"settings_codec_av1" = "AV1";
 "settings_full_range_video" = "全范围视频（实验）";
 "settings_frame_pacing" = "帧时间策略";
 "settings_frame_pacing_low_latency" = "最低延迟";

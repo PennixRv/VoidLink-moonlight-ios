@@ -31,6 +31,14 @@
 - (id)initWithRefreshRate:(float)arg1 videoDynamicRange:(int)arg2;
 @end
 
+#if TARGET_OS_TV
+@interface StreamFrameViewController ()
+- (void)tvosShowLaunchWarningsIfNeeded;
+- (void)tvosScheduleOutputModeMismatchChecksIfNeeded;
+- (void)tvosCheckForOutputModeMismatch;
+@end
+#endif
+
 @implementation StreamFrameViewController {
     ControllerSupport *_controllerSupport;
     StreamManager *_streamMan;
@@ -44,6 +52,8 @@
 #if TARGET_OS_TV
     UIVisualEffectView *_overlayContainerView;
     UILabel *_overlayLabel;
+    BOOL _tvosDidScheduleOutputModeChecks;
+    NSString* _tvosOutputModeMismatchWarningText;
 #endif
     UILabel *_stageLabel;
     UILabel *_tipLabel;
@@ -263,6 +273,11 @@
 
 - (void)updateStatsOverlay {
     NSString* overlayText = [self->_streamMan getStatsOverlayText];
+#if TARGET_OS_TV
+    if (_tvosOutputModeMismatchWarningText.length > 0) {
+        overlayText = overlayText.length > 0 ? [NSString stringWithFormat:@"%@\n%@", _tvosOutputModeMismatchWarningText, overlayText] : _tvosOutputModeMismatchWarningText;
+    }
+#endif
     
     dispatch_async(dispatch_get_main_queue(), ^{
         [self updateOverlayText:overlayText];
@@ -368,6 +383,10 @@
 - (void) returnToMainFrame {
     // Reset display mode back to default
     [self updatePreferredDisplayMode:NO];
+#if TARGET_OS_TV
+    _tvosDidScheduleOutputModeChecks = NO;
+    _tvosOutputModeMismatchWarningText = nil;
+#endif
     
     [_statsUpdateTimer invalidate];
     _statsUpdateTimer = nil;
@@ -441,6 +460,7 @@
 
 #if TARGET_OS_TV
         [self updatePreferredDisplayMode:YES];
+        [self tvosShowLaunchWarningsIfNeeded];
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.75 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
             if (self.view.window != nil) {
                 [self updatePreferredDisplayMode:YES];
@@ -716,14 +736,85 @@
             AVDisplayCriteria* displayCriteria = [[AVDisplayCriteria alloc] initWithRefreshRate:preferredRefreshRate
                                                                               videoDynamicRange:dynamicRange];
             displayManager.preferredDisplayCriteria = displayCriteria;
+            [self tvosScheduleOutputModeMismatchChecksIfNeeded];
         }
         else {
             // Switch back to the default display mode
             displayManager.preferredDisplayCriteria = nil;
+            _tvosDidScheduleOutputModeChecks = NO;
+            _tvosOutputModeMismatchWarningText = nil;
         }
     }
 #endif
 }
+
+#if TARGET_OS_TV
+- (void)tvosShowLaunchWarningsIfNeeded
+{
+    if (self.streamConfig.launchWarnings.count == 0) {
+        return;
+    }
+
+    NSString* joinedWarnings = [self.streamConfig.launchWarnings componentsJoinedByString:@"\n"];
+    NSString* fmt = VLTVOS_STR(@"Adjusted for this Apple TV:\n%@", @"已按当前 Apple TV 能力调整：\n%@");
+    NSString* text = [NSString stringWithFormat:fmt, joinedWarnings];
+    [self updateOverlayText:text];
+
+    if (!_settings.statsOverlay) {
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(4.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            if (self->_statsUpdateTimer == nil) {
+                [self updateOverlayText:nil];
+            }
+        });
+    }
+}
+
+- (void)tvosScheduleOutputModeMismatchChecksIfNeeded
+{
+    if (_tvosDidScheduleOutputModeChecks) {
+        return;
+    }
+
+    int effectiveFps = self.streamConfig.frameRate;
+    if (effectiveFps <= 0) {
+        return;
+    }
+
+    _tvosDidScheduleOutputModeChecks = YES;
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+        [self tvosCheckForOutputModeMismatch];
+    });
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(3.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+        [self tvosCheckForOutputModeMismatch];
+    });
+}
+
+- (void)tvosCheckForOutputModeMismatch
+{
+    if (self.view.window == nil || _streamMan == nil) {
+        return;
+    }
+
+    int effectiveFps = self.streamConfig.frameRate;
+    double outputHz = [_streamMan currentDisplayRefreshRate];
+    if (effectiveFps <= 0 || outputHz <= 0.0) {
+        return;
+    }
+
+    if (outputHz + 3.0 < effectiveFps) {
+        NSString* fmt = VLTVOS_STR(@"Streaming at %d FPS, but tvOS output is %.1f Hz. Check your HDMI mode or TV refresh-rate support.",
+                                   @"当前串流是 %d 帧，但 tvOS 实际输出只有 %.1f Hz。请检查 HDMI 模式或电视刷新率支持。");
+        _tvosOutputModeMismatchWarningText = [NSString stringWithFormat:fmt, effectiveFps, outputHz];
+
+        if (!_settings.statsOverlay) {
+            [self updateOverlayText:_tvosOutputModeMismatchWarningText];
+        }
+    }
+    else {
+        _tvosOutputModeMismatchWarningText = nil;
+    }
+}
+#endif
 
 - (void) setHdrMode:(bool)enabled {
     Log(LOG_I, @"HDR is now: %s", enabled ? "active" : "inactive");

@@ -222,18 +222,20 @@
 			<key>DefaultValue</key>
 			<string>0</string>
 			<key>Values</key>
-			<array>
-				<string>0</string>
-				<string>1</string>
-				<string>2</string>
-			</array>
-			<key>Titles</key>
-			<array>
-				<string>settings_codec_auto</string>
-				<string>settings_codec_h264</string>
-				<string>settings_codec_hevc</string>
-			</array>
-		</dict>
+				<array>
+					<string>0</string>
+					<string>1</string>
+					<string>2</string>
+					<string>3</string>
+				</array>
+				<key>Titles</key>
+				<array>
+					<string>settings_codec_auto</string>
+					<string>settings_codec_h264</string>
+					<string>settings_codec_hevc</string>
+					<string>settings_codec_av1</string>
+				</array>
+			</dict>
 		<dict>
 			<key>Type</key>
 			<string>PSToggleSwitchSpecifier</string>

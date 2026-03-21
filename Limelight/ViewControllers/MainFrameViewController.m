@@ -693,6 +693,39 @@ static NSMutableSet* hostList;
     [[self activeViewController] presentViewController:alertController animated:YES completion:nil];
 }
 
+#if TARGET_OS_TV
+- (int)tvosCurrentDisplayMaximumRefreshRate
+{
+    UIScreen* screen = nil;
+    if (@available(tvOS 13.0, *)) {
+        screen = self.view.window.windowScene.screen;
+    }
+    if (screen == nil && self.view.window != nil) {
+        screen = self.view.window.screen;
+    }
+    if (screen == nil) {
+        screen = [UIScreen mainScreen];
+    }
+
+    if (@available(tvOS 10.3, *)) {
+        return MAX((int)screen.maximumFramesPerSecond, 0);
+    }
+
+    return 60;
+}
+
+- (void)tvosAppendCapabilityWarning:(NSMutableArray<NSString*>*)warnings message:(NSString*)message
+{
+    if (message.length == 0) {
+        return;
+    }
+    if (![warnings containsObject:message]) {
+        [warnings addObject:message];
+    }
+    Log(LOG_W, @"tvOS capability adjustment: %@", message);
+}
+#endif
+
 - (void) prepareToStreamApp:(TemporaryApp *)app {
     _streamConfig = [[StreamConfiguration alloc] init];
     _streamConfig.host = app.host.activeAddress;
@@ -704,7 +737,15 @@ static NSMutableSet* hostList;
     DataManager* dataMan = [[DataManager alloc] init];
     TemporarySettings* streamSettings = [dataMan getSettings];
     
-    _streamConfig.frameRate = [streamSettings.framerate intValue];
+    _streamConfig.requestedFrameRate = [streamSettings.framerate intValue];
+    _streamConfig.requestedWidth = [streamSettings.width intValue];
+    _streamConfig.requestedHeight = [streamSettings.height intValue];
+    _streamConfig.requestedBitRate = [streamSettings.bitrate intValue];
+    _streamConfig.requestedHdr = streamSettings.enableHdr;
+    _streamConfig.frameRate = _streamConfig.requestedFrameRate;
+#if TARGET_OS_TV
+    NSMutableArray<NSString*>* launchWarnings = [NSMutableArray array];
+#endif
 #if !TARGET_OS_TV
     if (@available(iOS 10.3, *)) {
         // Don't stream more FPS than the display can show.
@@ -719,21 +760,26 @@ static NSMutableSet* hostList;
     }
 #endif
     
-    _streamConfig.height = [streamSettings.height intValue];
-    _streamConfig.width = [streamSettings.width intValue];
+    _streamConfig.height = _streamConfig.requestedHeight;
+    _streamConfig.width = _streamConfig.requestedWidth;
 #if TARGET_OS_TV
+    _streamConfig.displayMaximumRefreshRate = [self tvosCurrentDisplayMaximumRefreshRate];
+
     // Don't allow streaming 4K on the Apple TV HD
     struct utsname systemInfo;
     uname(&systemInfo);
     if (strcmp(systemInfo.machine, "AppleTV5,3") == 0 && _streamConfig.height >= 2160) {
-        Log(LOG_W, @"4K streaming not supported on Apple TV HD");
         _streamConfig.width = 1920;
         _streamConfig.height = 1080;
+        [self tvosAppendCapabilityWarning:launchWarnings
+                                  message:VLTVOS_STR(@"Apple TV HD does not support 4K output. Falling back to 1080p.",
+                                                     @"Apple TV HD 不支持 4K 输出，已降级到 1080p。")];
     }
 #endif
     
-    _streamConfig.bitRate = [streamSettings.bitrate intValue];
+    _streamConfig.bitRate = _streamConfig.requestedBitRate;
     _streamConfig.optimizeGameSettings = streamSettings.optimizeGames;
+    _streamConfig.effectiveSops = _streamConfig.optimizeGameSettings;
     _streamConfig.playAudioOnPC = streamSettings.playAudioOnPC;
     _streamConfig.useFramePacing = streamSettings.useFramePacing;
     _streamConfig.swapABXYButtons = streamSettings.swapABXYButtons;
@@ -746,8 +792,19 @@ static NSMutableSet* hostList;
     int physicalOutputChannels = (int)[AVAudioSession sharedInstance].maximumOutputNumberOfChannels;
     Log(LOG_I, @"Audio device supports %d channels", physicalOutputChannels);
     
-    int numberOfChannels = MIN([streamSettings.audioConfig intValue], physicalOutputChannels);
+    int requestedChannels = [streamSettings.audioConfig intValue];
+    int numberOfChannels = MIN(requestedChannels, physicalOutputChannels);
     Log(LOG_I, @"Selected number of audio channels %d", numberOfChannels);
+#if TARGET_OS_TV
+    if (requestedChannels > 0 && physicalOutputChannels > 0 && numberOfChannels < requestedChannels) {
+        NSString* fmt = VLTVOS_STR(@"The current HDMI audio path reports %d channels. Falling back from %d-channel LPCM.",
+                                   @"当前 HDMI 音频链只报告 %d 个声道，已从 %d 声道 LPCM 降级。");
+        [self tvosAppendCapabilityWarning:launchWarnings
+                                  message:[NSString stringWithFormat:fmt,
+                                           physicalOutputChannels,
+                                           requestedChannels]];
+    }
+#endif
     if (numberOfChannels >= 8) {
         _streamConfig.audioConfiguration = AUDIO_CONFIGURATION_71_SURROUND;
     }
@@ -766,6 +823,17 @@ static NSMutableSet* hostList;
             if (VTIsHardwareDecodeSupported(kCMVideoCodecType_AV1)) {
                 _streamConfig.supportedVideoFormats |= VIDEO_FORMAT_AV1_MAIN8;
             }
+#if TARGET_OS_TV
+            else {
+                [self tvosAppendCapabilityWarning:launchWarnings
+                                          message:VLTVOS_STR(@"AV1 decoding is unavailable on this Apple TV. Falling back to HEVC/H.264.",
+                                                             @"当前 Apple TV 不支持 AV1 硬解，已回退到 HEVC/H.264。")];
+            }
+#endif
+#elif TARGET_OS_TV
+            [self tvosAppendCapabilityWarning:launchWarnings
+                                      message:VLTVOS_STR(@"AV1 decoding requires tvOS 16 or later. Falling back to HEVC/H.264.",
+                                                         @"AV1 解码需要 tvOS 16 或更高版本，已回退到 HEVC/H.264。")];
 #endif
             // Fall-through
             
@@ -774,6 +842,13 @@ static NSMutableSet* hostList;
             if (VTIsHardwareDecodeSupported(kCMVideoCodecType_HEVC)) {
                 _streamConfig.supportedVideoFormats |= VIDEO_FORMAT_H265;
             }
+#if TARGET_OS_TV
+            else if (streamSettings.preferredCodec == CODEC_PREF_HEVC) {
+                [self tvosAppendCapabilityWarning:launchWarnings
+                                          message:VLTVOS_STR(@"HEVC decoding is unavailable on this Apple TV. Falling back to H.264.",
+                                                             @"当前 Apple TV 不支持 HEVC 硬解，已回退到 H.264。")];
+            }
+#endif
             // Fall-through
             
         case CODEC_PREF_H264:
@@ -790,10 +865,22 @@ static NSMutableSet* hostList;
 	        if (streamSettings.enableHdr && VLTVOSIsEligibleForHDRPlayback()) {
 	#else
 	        if (streamSettings.enableHdr && (AVPlayer.availableHDRModes & AVPlayerHDRModeHDR10) != 0) {
-	#endif
+#endif
 	            _streamConfig.supportedVideoFormats |= VIDEO_FORMAT_H265_MAIN10;
 	        }
 	    }
+#if TARGET_OS_TV
+    else if (streamSettings.enableHdr && !VTIsHardwareDecodeSupported(kCMVideoCodecType_HEVC)) {
+        [self tvosAppendCapabilityWarning:launchWarnings
+                                  message:VLTVOS_STR(@"HDR streaming requires HEVC Main10 decoding on Apple TV. Streaming will use SDR.",
+                                                     @"Apple TV 上的 HDR 串流需要 HEVC Main10 解码，串流将使用 SDR。")];
+    }
+    else if (streamSettings.enableHdr && !VLTVOSIsEligibleForHDRPlayback()) {
+        [self tvosAppendCapabilityWarning:launchWarnings
+                                  message:VLTVOS_STR(@"HDR playback is unavailable on the current tvOS/HDMI display chain. Streaming will use SDR.",
+                                                     @"当前 tvOS/HDMI 显示链不支持 HDR，串流将使用 SDR。")];
+    }
+#endif
     
 #if defined(__IPHONE_16_0) || defined(__TVOS_16_0)
 	    // Add the AV1 Main10 format if AV1 and HDR are both enabled and supported
@@ -807,6 +894,9 @@ static NSMutableSet* hostList;
 	        ) {
 	        _streamConfig.supportedVideoFormats |= VIDEO_FORMAT_AV1_MAIN10;
 	    }
+#endif
+#if TARGET_OS_TV
+    _streamConfig.launchWarnings = [launchWarnings copy];
 #endif
 }
 

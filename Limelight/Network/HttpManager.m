@@ -11,6 +11,9 @@
 #import "CryptoManager.h"
 #import "TemporaryApp.h"
 #import "ServerInfoResponse.h"
+#if TARGET_OS_TV
+#import "../VLTVOSUI.h"
+#endif
 
 #include <libxml2/libxml/xmlreader.h>
 #include <string.h>
@@ -28,7 +31,7 @@
     NSString* _uniqueId;
     NSString* _deviceName;
     NSData* _serverCert;
-    
+
     TemporaryHost *_host; // May be nil
     NSString* _baseHTTPSURL;
 }
@@ -36,7 +39,7 @@
 + (NSData*) fixXmlVersion:(NSData*) xmlData {
     NSString* dataString = [[NSString alloc] initWithData:xmlData encoding:NSUTF8StringEncoding];
     NSString* xmlString = [dataString stringByReplacingOccurrencesOfString:@"UTF-16" withString:@"UTF-8" options:NSCaseInsensitiveSearch range:NSMakeRange(0, [dataString length])];
-    
+
     return [xmlString dataUsingEncoding:NSUTF8StringEncoding];
 }
 
@@ -57,23 +60,23 @@
     _uniqueId = @"0123456789ABCDEF";
     _deviceName = deviceName;
     _serverCert = serverCert;
-    
+
     NSString* address = [Utils addressPortStringToAddress:hostAddressPortString];
     unsigned short port = [Utils addressPortStringToPort:hostAddressPortString];
-    
+
     // If this is an IPv6 literal, we must properly enclose it in brackets
     if ([address containsString:@":"]) {
         _urlSafeHostName = [NSString stringWithFormat:@"[%@]", address];
     } else {
         _urlSafeHostName = address;
     }
-    
+
     _baseHTTPURL = [NSString stringWithFormat:@"http://%@:%u", _urlSafeHostName, port];
-    
+
     if (httpsPort) {
         _baseHTTPSURL = [NSString stringWithFormat:@"https://%@:%u", _urlSafeHostName, httpsPort];
     }
-    
+
     return self;
 }
 
@@ -92,16 +95,16 @@
                 return NO;
             }
             [serverInfoResponse populateHost:dummyHost];
-            
+
             // Pass the port back if the caller provided storage for it
             if (_host) {
                 _host.httpsPort = dummyHost.httpsPort;
             }
-            
+
             _baseHTTPSURL = [NSString stringWithFormat:@"https://%@:%u", _urlSafeHostName, dummyHost.httpsPort];
         }
     }
-    
+
     return YES;
 }
 
@@ -112,18 +115,18 @@
             request.response.statusCode = EHOSTDOWN;
             request.response.statusMessage = @"Host is unreachable";
         }
-        
+
         return;
     }
 
     __block NSData* requestResp = nil;
     __block NSError* respError = nil;
     __block dispatch_semaphore_t requestLock = dispatch_semaphore_create(0);
-    
+
     Log(LOG_D, @"Making Request: %@", request);
     NSURLSession* urlSession = [NSURLSession sessionWithConfiguration:[NSURLSessionConfiguration ephemeralSessionConfiguration] delegate:self delegateQueue:nil];
     [[urlSession dataTaskWithRequest:request.request completionHandler:^(NSData * __nullable data, NSURLResponse * __nullable response, NSError * __nullable error) {
-        
+
         if (error != NULL) {
             Log(LOG_D, @"Connection error: %@", error);
             respError = error;
@@ -140,16 +143,16 @@
                 }
             }
         }
-        
+
         dispatch_semaphore_signal(requestLock);
     }] resume];
-    
+
     dispatch_semaphore_wait(requestLock, DISPATCH_TIME_FOREVER);
     [urlSession invalidateAndCancel];
-    
+
     if (!respError && request.response) {
         [request.response populateWithData:requestResp];
-        
+
         // If the fallback error code was detected, issue the fallback request
         if (request.response.statusCode == request.fallbackError && request.fallbackRequest != NULL) {
             Log(LOG_D, @"Request failed with fallback error code: %d", request.fallbackError);
@@ -163,7 +166,7 @@
         // We must have a pinned cert for HTTPS. If we fail, it must be due to
         // a non-matching cert, not because we had no cert at all.
         assert(_serverCert != nil);
-        
+
         if (request.fallbackRequest) {
             // This will fall back to HTTP on serverinfo queries to allow us to pair again
             // and get the server cert updated.
@@ -220,7 +223,7 @@
     if (![self ensureHttpsUrlPopulated:NO]) {
         return nil;
     }
-    
+
     NSString* urlString = [NSString stringWithFormat:@"%@/pair?uniqueid=%@&devicename=%@&updateState=1&phrase=pairchallenge", _baseHTTPSURL, _uniqueId, _deviceName];
     return [self createRequestFromString:urlString timeout:NORMAL_TIMEOUT_SEC];
 }
@@ -229,7 +232,7 @@
     if (![self ensureHttpsUrlPopulated:NO]) {
         return nil;
     }
-    
+
     NSString* urlString = [NSString stringWithFormat:@"%@/applist?uniqueid=%@", _baseHTTPSURL, _uniqueId];
     return [self createRequestFromString:urlString timeout:NORMAL_TIMEOUT_SEC];
 }
@@ -239,11 +242,11 @@
         // Use HTTP if the cert is not pinned yet
         return [self newHttpServerInfoRequest:fastFail];
     }
-    
+
     if (![self ensureHttpsUrlPopulated:fastFail]) {
         return nil;
     }
-    
+
     NSString* urlString = [NSString stringWithFormat:@"%@/serverinfo?uniqueid=%@", _baseHTTPSURL, _uniqueId];
     return [self createRequestFromString:urlString timeout:(fastFail ? SHORT_TIMEOUT_SEC : NORMAL_TIMEOUT_SEC)];
 }
@@ -261,19 +264,50 @@
     if (![self ensureHttpsUrlPopulated:NO]) {
         return nil;
     }
-    
+
+    BOOL isSunshine = [config.appVersion containsString:@".-"];
+
     // Using an FPS value over 60 causes SOPS to default to 720p60,
     // so force it to 0 to ensure the correct resolution is set. We
     // used to use 60 here but that locked the frame rate to 60 FPS
     // on GFE 3.20.3. We do not do this hack for Sunshine (which is
-    // indicated by a negative version in the last field.
-    int fps = (config.frameRate > 60 && ![config.appVersion containsString:@".-"]) ? 0 : config.frameRate;
-    
+    // indicated by a negative version in the last field).
+    int fps = (config.frameRate > 60 && !isSunshine) ? 0 : config.frameRate;
+
+    BOOL enableSops = config.optimizeGameSettings;
+    BOOL sopsAutoDisabledForMode = NO;
+    if (!isSunshine && enableSops) {
+        int pixelCount = config.width * config.height;
+        if (pixelCount > 1280 * 720 &&
+            pixelCount != 1920 * 1080 &&
+            pixelCount != 3840 * 2160) {
+            Log(LOG_W, @"Disabling SOPS due to non-standard resolution on NVIDIA host: %dx%d", config.width, config.height);
+            enableSops = NO;
+            sopsAutoDisabledForMode = YES;
+        }
+    }
+    config.effectiveSops = enableSops;
+
+    if (sopsAutoDisabledForMode) {
+        NSMutableArray<NSString*>* warnings = config.launchWarnings != nil ? [config.launchWarnings mutableCopy] : [NSMutableArray array];
+        NSString* warning =
+#if TARGET_OS_TV
+            VLTVOS_STR(@"Non-standard high-resolution mode disabled SOPS on the NVIDIA host to avoid a forced 720p60 fallback.",
+                       @"检测到非常规高分辨率模式，已在 NVIDIA 主机上关闭 SOPS，以避免被强制降到 720p60。");
+#else
+            @"Non-standard high-resolution mode disabled SOPS on the NVIDIA host to avoid a forced 720p60 fallback.";
+#endif
+        if (![warnings containsObject:warning]) {
+            [warnings addObject:warning];
+        }
+        config.launchWarnings = [warnings copy];
+    }
+
     NSString* urlString = [NSString stringWithFormat:@"%@/%@?uniqueid=%@&appid=%@&mode=%dx%dx%d&additionalStates=1&sops=%d&rikey=%@&rikeyid=%d%@&localAudioPlayMode=%d&surroundAudioInfo=%d&remoteControllersBitmap=%d&gcmap=%d&gcpersist=%d%s",
                            _baseHTTPSURL, verb, _uniqueId,
                            config.appID,
                            config.width, config.height, fps,
-                           config.optimizeGameSettings ? 1 : 0,
+                           enableSops ? 1 : 0,
                            [Utils bytesToHex:config.riKey], config.riKeyId,
                            (config.supportedVideoFormats & VIDEO_FORMAT_MASK_10BIT) ? @"&hdrMode=1&clientHdrCapVersion=0&clientHdrCapSupportedFlagsInUint32=0&clientHdrCapMetaDataId=NV_STATIC_METADATA_TYPE_1&clientHdrCapDisplayData=0x0x0x0x0x0x0x0x0x0x0": @"",
                            config.playAudioOnPC ? 1 : 0,
@@ -290,7 +324,7 @@
     if (![self ensureHttpsUrlPopulated:NO]) {
         return nil;
     }
-    
+
     NSString* urlString = [NSString stringWithFormat:@"%@/cancel?uniqueid=%@", _baseHTTPSURL, _uniqueId];
     return [self createRequestFromString:urlString timeout:LONG_TIMEOUT_SEC];
 }
@@ -299,7 +333,7 @@
     if (![self ensureHttpsUrlPopulated:NO]) {
         return nil;
     }
-    
+
     NSString* urlString = [NSString stringWithFormat:@"%@/appasset?uniqueid=%@&appid=%@&AssetType=2&AssetIdx=0", _baseHTTPSURL, _uniqueId, appId];
     return [self createRequestFromString:urlString timeout:NORMAL_TIMEOUT_SEC];
 }
@@ -316,9 +350,9 @@
 // Returns an array containing the certificate
 - (NSArray*)getCertificate:(SecIdentityRef) identity {
     SecCertificateRef certificate = nil;
-    
+
     SecIdentityCopyCertificate(identity, &certificate);
-    
+
     return [[NSArray alloc] initWithObjects:(__bridge_transfer id)certificate, nil];
 }
 
@@ -342,10 +376,10 @@
     } else {
         Log(LOG_E, @"Error opening Certificate.");
     }
-    
+
     CFRelease(options);
     CFRelease(password);
-    
+
     return identityApp;
 }
 
@@ -358,30 +392,30 @@
             completionHandler(NSURLSessionAuthChallengePerformDefaultHandling, NULL);
             return;
         }
-        
+
         SecCertificateRef actualCert = SecTrustGetCertificateAtIndex(challenge.protectionSpace.serverTrust, 0);
         if (actualCert == nil) {
             Log(LOG_E, @"Server certificate parsing error");
             completionHandler(NSURLSessionAuthChallengePerformDefaultHandling, NULL);
             return;
         }
-        
+
         CFDataRef actualCertData = SecCertificateCopyData(actualCert);
         if (actualCertData == nil) {
             Log(LOG_E, @"Server certificate data parsing error");
             completionHandler(NSURLSessionAuthChallengePerformDefaultHandling, NULL);
             return;
         }
-        
+
         if (!CFEqual(actualCertData, (__bridge CFDataRef)_serverCert)) {
             Log(LOG_E, @"Server certificate mismatch");
             CFRelease(actualCertData);
             completionHandler(NSURLSessionAuthChallengePerformDefaultHandling, NULL);
             return;
         }
-        
+
         CFRelease(actualCertData);
-        
+
         // Allow TLS handshake to proceed
         completionHandler(NSURLSessionAuthChallengeUseCredential,
                           [NSURLCredential credentialForTrust: challenge.protectionSpace.serverTrust]);
