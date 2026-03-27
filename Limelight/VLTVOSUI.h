@@ -24,6 +24,14 @@ static const CGFloat VLTVOSCardShadowRadiusFocused = 16.0;
 static const CGFloat VLTVOSCardShadowOffsetYFocused = 14.0;
 static const CGFloat VLTVOSCardMotionAmplitude = 0.0;
 static const CGFloat VLTVOSCardCornerRadius = 16.0;
+static const CGFloat VLTVOSHomeHorizontalInset = 88.0;
+static const CGFloat VLTVOSHomeActionHeight = 72.0;
+static const CGFloat VLTVOSHomeActionSpacing = 20.0;
+static const CGFloat VLTVOSHostsRailSpacing = 56.0;
+static const CGFloat VLTVOSHostCardWidth = 540.0;
+static const CGFloat VLTVOSHostCardHeight = 304.0;
+static const CGFloat VLTVOSHostCardOuterPadding = 28.0;
+static const CGFloat VLTVOSPillCornerRadius = 30.0;
 
 static inline BOOL VLTVOSIsZhHans(void)
 {

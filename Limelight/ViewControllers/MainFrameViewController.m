@@ -45,6 +45,12 @@
 - (void)tvosInstallBackgroundIfNeeded;
 - (void)tvosUpdateBackgroundGradientColorsIfNeeded;
 - (void)tvosUpdateFocusGuides;
+- (void)tvosEnsureHomeChromeIfNeeded;
+- (void)tvosLayoutHostsHome;
+- (void)tvosSetHostsHomeVisible:(BOOL)visible;
+- (void)tvosUpdateHomeChromeCopy;
+- (void)tvosUpdateActionButtonMaterials;
+- (void)tvosRunNetworkTest:(id)sender;
 @end
 #endif
 
@@ -69,15 +75,314 @@
     UIView* _tvosBackgroundView;
     CAGradientLayer* _tvosBackgroundGradientLayer;
     UIFocusGuide* _tvosTopToContentFocusGuide;
+    UIView* _tvosHomeChromeView;
+    UIView* _tvosHomeGlowLeading;
+    UIView* _tvosHomeGlowTrailing;
+    UILabel* _tvosHomeEyebrowLabel;
+    UILabel* _tvosHomeTitleLabel;
+    UILabel* _tvosHomeSubtitleLabel;
+    UILabel* _tvosHomeSectionLabel;
+    UILabel* _tvosHomeSectionMetaLabel;
+    UIButton* _tvosSettingsActionButton;
+    UIButton* _tvosDiagnosticsActionButton;
+    UIButton* _tvosAddHostActionButton;
+    NSArray<UIButton*>* _tvosHomeActionButtons;
 #endif
 }
 static NSMutableSet* hostList;
 
 #if TARGET_OS_TV
+static const NSInteger VLTVOSActionButtonMaterialTag = 4701;
+
+- (UIButton*)tvosActionButtonForFocusedView:(UIView*)view
+{
+    UIView* candidate = view;
+    while (candidate != nil) {
+        if ([candidate isKindOfClass:[UIButton class]] &&
+            [_tvosHomeActionButtons containsObject:(UIButton*)candidate]) {
+            return (UIButton*)candidate;
+        }
+        candidate = candidate.superview;
+    }
+
+    return nil;
+}
+
+- (void)tvosSetActionButton:(UIButton*)button focused:(BOOL)focused
+{
+    if (button == nil) {
+        return;
+    }
+
+    UIVisualEffectView* materialView = (UIVisualEffectView*)[button viewWithTag:VLTVOSActionButtonMaterialTag];
+    if (materialView != nil) {
+        VLTVOSApplyCardMaterialToEffectView(materialView, self.traitCollection, focused);
+    }
+
+    [button setTitleColor:VLTVOSCardForegroundColor(self.traitCollection, focused) forState:UIControlStateNormal];
+}
+
+- (UIButton*)tvosCreateActionButtonWithTitle:(NSString*)title action:(SEL)action
+{
+    UIButton* button = [UIButton buttonWithType:UIButtonTypeSystem];
+    button.contentHorizontalAlignment = UIControlContentHorizontalAlignmentCenter;
+    button.contentVerticalAlignment = UIControlContentVerticalAlignmentCenter;
+    button.contentEdgeInsets = UIEdgeInsetsMake(0, 28, 0, 28);
+    button.titleLabel.font = [UIFont systemFontOfSize:24 weight:UIFontWeightSemibold];
+    button.titleLabel.adjustsFontSizeToFitWidth = YES;
+    button.titleLabel.minimumScaleFactor = 0.85;
+    button.tintColor = VLTVOSCardForegroundColor(self.traitCollection, NO);
+    [button setTitle:title forState:UIControlStateNormal];
+    [button setTitleColor:VLTVOSCardForegroundColor(self.traitCollection, NO) forState:UIControlStateNormal];
+    [button addTarget:self action:action forControlEvents:UIControlEventPrimaryActionTriggered];
+
+    UIVisualEffectView* materialView = [[UIVisualEffectView alloc] initWithEffect:nil];
+    materialView.tag = VLTVOSActionButtonMaterialTag;
+    materialView.userInteractionEnabled = NO;
+    materialView.frame = button.bounds;
+    materialView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+    materialView.layer.cornerRadius = VLTVOSPillCornerRadius;
+    materialView.clipsToBounds = YES;
+    VLTVOSSetContinuousCornerIfAvailable(materialView.layer);
+    VLTVOSApplyCardMaterialToEffectView(materialView, self.traitCollection, NO);
+    [button insertSubview:materialView atIndex:0];
+
+    return button;
+}
+
+- (void)tvosEnsureHomeChromeIfNeeded
+{
+    if (_tvosHomeChromeView != nil) {
+        return;
+    }
+
+    _tvosHomeChromeView = [[UIView alloc] initWithFrame:self.view.bounds];
+    _tvosHomeChromeView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+    _tvosHomeChromeView.backgroundColor = [UIColor clearColor];
+
+    _tvosHomeGlowLeading = [[UIView alloc] initWithFrame:CGRectZero];
+    _tvosHomeGlowLeading.userInteractionEnabled = NO;
+    _tvosHomeGlowLeading.alpha = 0.18;
+    _tvosHomeGlowLeading.backgroundColor = [UIColor colorWithRed:0.31 green:0.67 blue:0.98 alpha:1.0];
+    _tvosHomeGlowLeading.layer.cornerRadius = 220.0;
+    [_tvosHomeChromeView addSubview:_tvosHomeGlowLeading];
+
+    _tvosHomeGlowTrailing = [[UIView alloc] initWithFrame:CGRectZero];
+    _tvosHomeGlowTrailing.userInteractionEnabled = NO;
+    _tvosHomeGlowTrailing.alpha = 0.12;
+    _tvosHomeGlowTrailing.backgroundColor = [UIColor colorWithRed:0.45 green:0.88 blue:0.77 alpha:1.0];
+    _tvosHomeGlowTrailing.layer.cornerRadius = 180.0;
+    [_tvosHomeChromeView addSubview:_tvosHomeGlowTrailing];
+
+    _tvosHomeEyebrowLabel = [[UILabel alloc] initWithFrame:CGRectZero];
+    _tvosHomeEyebrowLabel.font = [UIFont systemFontOfSize:24 weight:UIFontWeightSemibold];
+    _tvosHomeEyebrowLabel.textColor = VLTVOSSecondaryForegroundColor(self.traitCollection, NO);
+    _tvosHomeEyebrowLabel.text = @"Moonlight";
+    [_tvosHomeChromeView addSubview:_tvosHomeEyebrowLabel];
+
+    _tvosHomeTitleLabel = [[UILabel alloc] initWithFrame:CGRectZero];
+    _tvosHomeTitleLabel.font = [UIFont systemFontOfSize:60 weight:UIFontWeightBold];
+    _tvosHomeTitleLabel.textColor = VLTVOSCardForegroundColor(self.traitCollection, NO);
+    _tvosHomeTitleLabel.numberOfLines = 2;
+    [_tvosHomeChromeView addSubview:_tvosHomeTitleLabel];
+
+    _tvosHomeSubtitleLabel = [[UILabel alloc] initWithFrame:CGRectZero];
+    _tvosHomeSubtitleLabel.font = [UIFont systemFontOfSize:24 weight:UIFontWeightRegular];
+    _tvosHomeSubtitleLabel.textColor = VLTVOSSecondaryForegroundColor(self.traitCollection, NO);
+    _tvosHomeSubtitleLabel.numberOfLines = 2;
+    [_tvosHomeChromeView addSubview:_tvosHomeSubtitleLabel];
+
+    _tvosHomeSectionLabel = [[UILabel alloc] initWithFrame:CGRectZero];
+    _tvosHomeSectionLabel.font = [UIFont systemFontOfSize:30 weight:UIFontWeightSemibold];
+    _tvosHomeSectionLabel.textColor = VLTVOSCardForegroundColor(self.traitCollection, NO);
+    _tvosHomeSectionLabel.text = VLTVOS_STR(@"Hosts", @"主机");
+    [_tvosHomeChromeView addSubview:_tvosHomeSectionLabel];
+
+    _tvosHomeSectionMetaLabel = [[UILabel alloc] initWithFrame:CGRectZero];
+    _tvosHomeSectionMetaLabel.font = [UIFont systemFontOfSize:22 weight:UIFontWeightRegular];
+    _tvosHomeSectionMetaLabel.textAlignment = NSTextAlignmentRight;
+    _tvosHomeSectionMetaLabel.textColor = VLTVOSSecondaryForegroundColor(self.traitCollection, NO);
+    [_tvosHomeChromeView addSubview:_tvosHomeSectionMetaLabel];
+
+    _tvosSettingsActionButton = [self tvosCreateActionButtonWithTitle:VLTVOS_STR(@"Settings", @"设置")
+                                                               action:@selector(openTvSettings:)];
+    _tvosDiagnosticsActionButton = [self tvosCreateActionButtonWithTitle:VLTVOS_STR(@"Network Test", @"网络诊断")
+                                                                  action:@selector(tvosRunNetworkTest:)];
+    _tvosAddHostActionButton = [self tvosCreateActionButtonWithTitle:VLTVOS_STR(@"Add Host", @"手动添加主机")
+                                                              action:@selector(addHostClicked)];
+
+    _tvosHomeActionButtons = @[_tvosSettingsActionButton, _tvosDiagnosticsActionButton, _tvosAddHostActionButton];
+    for (UIButton* button in _tvosHomeActionButtons) {
+        [_tvosHomeChromeView addSubview:button];
+    }
+
+    [self.view addSubview:_tvosHomeChromeView];
+}
+
+- (void)tvosLayoutHostsHome
+{
+    if (_tvosHomeChromeView == nil) {
+        return;
+    }
+
+    if (_selectedHost != nil && hostScrollView.superview == nil) {
+        return;
+    }
+
+    CGRect bounds = self.view.bounds;
+    CGFloat safeTop = self.view.safeAreaInsets.top;
+    CGFloat safeBottom = self.view.safeAreaInsets.bottom;
+    CGFloat inset = VLTVOSHomeHorizontalInset;
+    CGFloat maxTextWidth = MIN(bounds.size.width - inset * 2.0, 880.0);
+
+    _tvosHomeChromeView.frame = bounds;
+    _tvosHomeGlowLeading.frame = CGRectMake(bounds.size.width - 520.0, safeTop + 18.0, 360.0, 360.0);
+    _tvosHomeGlowTrailing.frame = CGRectMake(inset * 1.2, bounds.size.height - 320.0, 280.0, 280.0);
+    _tvosHomeGlowLeading.layer.cornerRadius = _tvosHomeGlowLeading.bounds.size.width / 2.0;
+    _tvosHomeGlowTrailing.layer.cornerRadius = _tvosHomeGlowTrailing.bounds.size.width / 2.0;
+
+    CGFloat y = safeTop + 18.0;
+
+    [_tvosHomeEyebrowLabel sizeToFit];
+    _tvosHomeEyebrowLabel.frame = CGRectMake(inset, y, _tvosHomeEyebrowLabel.bounds.size.width, _tvosHomeEyebrowLabel.bounds.size.height);
+
+    y = CGRectGetMaxY(_tvosHomeEyebrowLabel.frame) + 8.0;
+
+    CGSize titleSize = [_tvosHomeTitleLabel sizeThatFits:CGSizeMake(maxTextWidth, CGFLOAT_MAX)];
+    _tvosHomeTitleLabel.frame = CGRectMake(inset, y, maxTextWidth, titleSize.height);
+
+    y = CGRectGetMaxY(_tvosHomeTitleLabel.frame) + 10.0;
+
+    CGSize subtitleSize = [_tvosHomeSubtitleLabel sizeThatFits:CGSizeMake(maxTextWidth, CGFLOAT_MAX)];
+    _tvosHomeSubtitleLabel.frame = CGRectMake(inset, y, maxTextWidth, subtitleSize.height);
+
+    CGFloat buttonX = inset;
+    CGFloat buttonY = CGRectGetMaxY(_tvosHomeSubtitleLabel.frame) + 28.0;
+    for (UIButton* button in _tvosHomeActionButtons) {
+        CGSize buttonSize = [button sizeThatFits:CGSizeMake(CGFLOAT_MAX, VLTVOSHomeActionHeight)];
+        CGFloat width = MAX(210.0, ceil(buttonSize.width) + 42.0);
+        button.frame = CGRectMake(buttonX, buttonY, width, VLTVOSHomeActionHeight);
+        button.layer.cornerRadius = VLTVOSPillCornerRadius;
+        button.clipsToBounds = NO;
+        buttonX = CGRectGetMaxX(button.frame) + VLTVOSHomeActionSpacing;
+    }
+
+    CGFloat sectionY = CGRectGetMaxY(_tvosSettingsActionButton.frame) + 42.0;
+    [_tvosHomeSectionLabel sizeToFit];
+    _tvosHomeSectionLabel.frame = CGRectMake(inset, sectionY, _tvosHomeSectionLabel.bounds.size.width, _tvosHomeSectionLabel.bounds.size.height);
+
+    CGFloat sectionMetaWidth = 320.0;
+    _tvosHomeSectionMetaLabel.frame = CGRectMake(bounds.size.width - inset - sectionMetaWidth,
+                                                 sectionY + 4.0,
+                                                 sectionMetaWidth,
+                                                 28.0);
+
+    CGFloat railY = CGRectGetMaxY(_tvosHomeSectionLabel.frame) + 24.0;
+    CGFloat desiredRailHeight = VLTVOSHostCardHeight + VLTVOSHostCardOuterPadding * 2.0 + 44.0;
+    CGFloat railHeight = MIN(desiredRailHeight, bounds.size.height - railY - safeBottom - 28.0);
+    railHeight = MAX(railHeight, VLTVOSHostCardHeight + VLTVOSHostCardOuterPadding * 2.0);
+    CGSize previousSize = hostScrollView.frame.size;
+    hostScrollView.frame = CGRectMake(0.0, railY, bounds.size.width, railHeight);
+
+    if (!CGSizeEqualToSize(previousSize, hostScrollView.frame.size)) {
+        [self updateHosts];
+    }
+}
+
+- (void)tvosSetHostsHomeVisible:(BOOL)visible
+{
+    [self tvosEnsureHomeChromeIfNeeded];
+    [self.navigationController setNavigationBarHidden:visible animated:NO];
+    _tvosHomeChromeView.hidden = !visible;
+
+    if (visible) {
+        if (hostScrollView.superview == nil) {
+            [self.view addSubview:hostScrollView];
+        }
+        [self.view bringSubviewToFront:_tvosHomeChromeView];
+        [self.view bringSubviewToFront:hostScrollView];
+        [self tvosUpdateHomeChromeCopy];
+        [self tvosLayoutHostsHome];
+    }
+    else {
+        [hostScrollView removeFromSuperview];
+    }
+}
+
+- (void)tvosUpdateHomeChromeCopy
+{
+    NSUInteger hostCount = 0;
+    @synchronized (hostList) {
+        hostCount = hostList.count;
+    }
+
+    _tvosHomeTitleLabel.text = VLTVOS_STR(@"Choose a Host", @"选择一台主机");
+    if (hostCount == 0) {
+        _tvosHomeSubtitleLabel.text = VLTVOS_STR(@"We’re scanning your network for Sunshine and GameStream PCs. You can also add a host manually below.",
+                                                 @"正在搜索局域网中的 Sunshine 和 GameStream 主机。你也可以手动添加一台主机。");
+        _tvosHomeSectionMetaLabel.text = VLTVOS_STR(@"Scanning…", @"正在扫描…");
+    }
+    else if (hostCount == 1) {
+        _tvosHomeSubtitleLabel.text = VLTVOS_STR(@"Select the card below to open the app list. Long press for wake, diagnostics, and more options.",
+                                                 @"按下方卡片即可进入应用列表。长按可查看唤醒、诊断和更多操作。");
+        _tvosHomeSectionMetaLabel.text = VLTVOS_STR(@"1 device ready", @"1 台设备可用");
+    }
+    else {
+        _tvosHomeSubtitleLabel.text = VLTVOS_STR(@"Select any card below to browse apps. Long press a host for diagnostics, wake, or removal.",
+                                                 @"选择任意卡片即可浏览应用。长按主机可进行诊断、唤醒或移除。");
+        _tvosHomeSectionMetaLabel.text = [NSString stringWithFormat:VLTVOS_STR(@"%lu devices ready", @"%lu 台设备可用"),
+                                          (unsigned long)hostCount];
+    }
+}
+
+- (void)tvosUpdateActionButtonMaterials
+{
+    for (UIButton* button in _tvosHomeActionButtons) {
+        [self tvosSetActionButton:button focused:button.isFocused];
+    }
+}
+
+- (void)tvosRunNetworkTest:(id)sender
+{
+    (void)sender;
+    [self showLoadingFrame:^{
+        dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+            unsigned int portTestResult = LiTestClientConnectivity(CONN_TEST_SERVER, 443, ML_PORT_FLAG_ALL);
+            dispatch_sync(dispatch_get_main_queue(), ^{
+                [self hideLoadingFrame:^{
+                    NSString* message;
+
+                    if (portTestResult == 0) {
+                        message = VLTVOS_STR(@"This network does not appear to be blocking Moonlight. If streaming still fails, check your host firewall and Sunshine/GameStream setup.",
+                                             @"当前网络看起来没有阻止 Moonlight。如果仍然无法串流，请检查主机防火墙以及 Sunshine/GameStream 配置。");
+                    }
+                    else if (portTestResult == ML_TEST_RESULT_INCONCLUSIVE) {
+                        message = VLTVOS_STR(@"The network test could not be completed because Moonlight’s testing servers were unreachable. Check your Internet connection and try again later.",
+                                             @"网络测试无法完成，因为 Moonlight 的测试服务器不可达。请检查互联网连接后重试。");
+                    }
+                    else {
+                        char blockedPorts[512];
+                        LiStringifyPortFlags(portTestResult, "\n", blockedPorts, sizeof(blockedPorts));
+                        NSString* fmt = VLTVOS_STR(@"Your current network appears to be blocking Moonlight. Streaming may not work on this connection.\n\nBlocked ports:\n%s",
+                                                   @"当前网络看起来阻止了 Moonlight。在此网络下可能无法正常串流。\n\n被阻止的端口：\n%s");
+                        message = [NSString stringWithFormat:fmt, blockedPorts];
+                    }
+
+                    UIAlertController* alert = [UIAlertController alertControllerWithTitle:VLTVOS_STR(@"Network Test Complete", @"网络测试完成")
+                                                                                   message:message
+                                                                            preferredStyle:UIAlertControllerStyleAlert];
+                    [alert addAction:[UIAlertAction actionWithTitle:VLTVOS_STR(@"OK", @"确定") style:UIAlertActionStyleDefault handler:nil]];
+                    [[self activeViewController] presentViewController:alert animated:YES completion:nil];
+                }];
+            });
+        });
+    }];
+}
+
 - (id<UIFocusEnvironment>)tvosPreferredHostFocusEnvironment
 {
     if (hostScrollView == nil || hostScrollView.superview == nil) {
-        return nil;
+        return _tvosSettingsActionButton;
     }
 
     for (UIView* view in hostScrollView.subviews) {
@@ -88,7 +393,7 @@ static NSMutableSet* hostList;
     }
 
     // Fallback: let the focus system pick a focusable descendant.
-    return hostScrollView;
+    return hostScrollView ?: _tvosSettingsActionButton;
 }
 
 - (void)tvosUpdateFocusGuides
@@ -210,6 +515,10 @@ static NSMutableSet* hostList;
     else {
         self.title = VLTVOS_STR(@"Select Host", @"选择主机");
     }
+
+#if TARGET_OS_TV
+    [self tvosUpdateHomeChromeCopy];
+#endif
 }
 
 - (void)alreadyPaired {
@@ -377,14 +686,16 @@ static NSMutableSet* hostList;
     [self disableUpButton];
     
     [self.collectionView reloadData];
-    [self.view addSubview:hostScrollView];
 
 #if TARGET_OS_TV
+    [self tvosSetHostsHomeVisible:YES];
     [self tvosUpdateFocusGuides];
     if (!wasShowingHosts) {
         [self setNeedsFocusUpdate];
         [self updateFocusIfNeeded];
     }
+#else
+    [self.view addSubview:hostScrollView];
 #endif
 }
 
@@ -1104,6 +1415,12 @@ static NSMutableSet* hostList;
 }
 
 - (void)adjustScrollViewForSafeArea:(UIScrollView*)view {
+#if TARGET_OS_TV
+    if (view == hostScrollView) {
+        view.contentInset = UIEdgeInsetsZero;
+        return;
+    }
+#endif
     if (@available(iOS 11.0, *)) {
         if (self.view.safeAreaInsets.left >= 20 || self.view.safeAreaInsets.right >= 20) {
             view.contentInset = UIEdgeInsetsMake(0, 20, 0, 20);
@@ -1161,6 +1478,7 @@ static NSMutableSet* hostList;
     self.view.backgroundColor = VLTVOSBackgroundBaseColor(self.traitCollection);
 
     [self tvosInstallBackgroundIfNeeded];
+    [self tvosEnsureHomeChromeIfNeeded];
 #endif
     
     _loadingFrame = [self.storyboard instantiateViewControllerWithIdentifier:@"loadingFrame"];
@@ -1184,9 +1502,11 @@ static NSMutableSet* hostList;
     _boxArtCache = [[NSCache alloc] init];
         
     hostScrollView = [[ComputerScrollView alloc] init];
-    hostScrollView.frame = CGRectMake(0, self.navigationController.navigationBar.frame.origin.y + self.navigationController.navigationBar.frame.size.height, self.view.frame.size.width, self.view.frame.size.height / 2);
+    hostScrollView.frame = CGRectMake(0, 0, self.view.frame.size.width, VLTVOSHostCardHeight + VLTVOSHostCardOuterPadding * 2.0 + 44.0);
     [hostScrollView setShowsHorizontalScrollIndicator:NO];
     hostScrollView.delaysContentTouches = NO;
+    hostScrollView.clipsToBounds = NO;
+    hostScrollView.alwaysBounceHorizontal = YES;
 
 #if TARGET_OS_TV
     // Focus routing: provide a focus guide "landing zone" below the nav bar that can
@@ -1223,11 +1543,13 @@ static NSMutableSet* hostList;
     }
     else {
         [self updateTitle];
-        [self.view addSubview:hostScrollView];
 #if TARGET_OS_TV
+        [self tvosSetHostsHomeVisible:YES];
         [self tvosUpdateFocusGuides];
         [self setNeedsFocusUpdate];
         [self updateFocusIfNeeded];
+#else
+        [self.view addSubview:hostScrollView];
 #endif
     }
 }
@@ -1285,6 +1607,15 @@ static NSMutableSet* hostList;
     if (nextAppView != nil) {
         [nextAppView tvosSetAncestorFocused:YES];
     }
+
+    UIButton* prevActionButton = [self tvosActionButtonForFocusedView:context.previouslyFocusedView];
+    UIButton* nextActionButton = [self tvosActionButtonForFocusedView:context.nextFocusedView];
+    if (prevActionButton != nil && prevActionButton != nextActionButton) {
+        [self tvosSetActionButton:prevActionButton focused:NO];
+    }
+    if (nextActionButton != nil) {
+        [self tvosSetActionButton:nextActionButton focused:YES];
+    }
 }
 
 - (void)openTvSettings:(id)sender
@@ -1299,12 +1630,20 @@ static NSMutableSet* hostList;
     if (_tvosBackgroundGradientLayer != nil) {
         _tvosBackgroundGradientLayer.frame = _tvosBackgroundView.bounds;
     }
+
+    [self tvosLayoutHostsHome];
 }
 
 - (void)traitCollectionDidChange:(UITraitCollection *)previousTraitCollection
 {
     [super traitCollectionDidChange:previousTraitCollection];
     [self tvosUpdateBackgroundGradientColorsIfNeeded];
+    _tvosHomeEyebrowLabel.textColor = VLTVOSSecondaryForegroundColor(self.traitCollection, NO);
+    _tvosHomeTitleLabel.textColor = VLTVOSCardForegroundColor(self.traitCollection, NO);
+    _tvosHomeSubtitleLabel.textColor = VLTVOSSecondaryForegroundColor(self.traitCollection, NO);
+    _tvosHomeSectionLabel.textColor = VLTVOSCardForegroundColor(self.traitCollection, NO);
+    _tvosHomeSectionMetaLabel.textColor = VLTVOSSecondaryForegroundColor(self.traitCollection, NO);
+    [self tvosUpdateActionButtonMaterials];
 }
 
 - (void)tvosInstallBackgroundIfNeeded
@@ -1436,7 +1775,12 @@ static NSMutableSet* hostList;
     [[self revealViewController] setPrimaryViewController:self];
 #endif
     
+#if TARGET_OS_TV
+    [self.navigationController setNavigationBarHidden:(_selectedHost == nil) animated:NO];
+    [self tvosSetHostsHomeVisible:(_selectedHost == nil)];
+#else
     [self.navigationController setNavigationBarHidden:NO animated:YES];
+#endif
     
 #if !TARGET_OS_TV
     // Hide 1px border line
@@ -1564,13 +1908,25 @@ static NSMutableSet* hostList;
     UIComputerView* addComp = [[UIComputerView alloc] initForAddWithCallback:self];
     UIComputerView* compView;
     float prevEdge = -1;
+#if TARGET_OS_TV
+    CGFloat currentX = VLTVOSHomeHorizontalInset;
+    CGFloat rowY = floor((hostScrollView.frame.size.height - addComp.frame.size.height) / 2.0);
+#endif
     @synchronized (hostList) {
         // Sort the host list in alphabetical order
         NSArray* sortedHostList = [[hostList allObjects] sortedArrayUsingSelector:@selector(compareName:)];
         for (TemporaryHost* comp in sortedHostList) {
             compView = [[UIComputerView alloc] initWithComputer:comp andCallback:self];
+#if TARGET_OS_TV
+            CGRect compFrame = compView.frame;
+            compFrame.origin.x = currentX;
+            compFrame.origin.y = rowY;
+            compView.frame = compFrame;
+            currentX = CGRectGetMaxX(compFrame) + VLTVOSHostsRailSpacing;
+#else
             compView.center = CGPointMake([self getCompViewX:compView addComp:addComp prevEdge:prevEdge], hostScrollView.frame.size.height / 2);
             prevEdge = compView.frame.origin.x + compView.frame.size.width;
+#endif
             [hostScrollView addSubview:compView];
             
             // Start jobs to decode the box art in advance
@@ -1588,18 +1944,30 @@ static NSMutableSet* hostList;
     // Update the title in case we now have a PC
     [self updateTitle];
     
+#if TARGET_OS_TV
+    CGRect addFrame = addComp.frame;
+    addFrame.origin.x = currentX;
+    addFrame.origin.y = floor((hostScrollView.frame.size.height - addFrame.size.height) / 2.0);
+    addComp.frame = addFrame;
+    [hostScrollView addSubview:addComp];
+    CGFloat contentWidth = CGRectGetMaxX(addFrame) + VLTVOSHomeHorizontalInset;
+    [hostScrollView setContentSize:CGSizeMake(MAX(contentWidth, hostScrollView.frame.size.width + 1.0f),
+                                              hostScrollView.frame.size.height)];
+    [self tvosUpdateFocusGuides];
+#else
     prevEdge = [self getCompViewX:addComp addComp:addComp prevEdge:prevEdge];
     addComp.center = CGPointMake(prevEdge, hostScrollView.frame.size.height / 2);
     
     [hostScrollView addSubview:addComp];
     [hostScrollView setContentSize:CGSizeMake(prevEdge + addComp.frame.size.width, hostScrollView.frame.size.height)];
+#endif
 }
 
 - (float) getCompViewX:(UIComputerView*)comp addComp:(UIComputerView*)addComp prevEdge:(float)prevEdge {
     float padding;
     
 #if TARGET_OS_TV
-    padding = 100;
+    padding = VLTVOSHostsRailSpacing;
 #else
     padding = addComp.frame.size.width / 2;
 #endif
@@ -1680,7 +2048,11 @@ static NSMutableSet* hostList;
 #if TARGET_OS_TV
     BOOL wasShowingHostSelection = (hostScrollView.superview != nil);
 #endif
+#if TARGET_OS_TV
+    [self tvosSetHostsHomeVisible:NO];
+#else
     [hostScrollView removeFromSuperview];
+#endif
     [self.collectionView reloadData];
 
 #if TARGET_OS_TV
